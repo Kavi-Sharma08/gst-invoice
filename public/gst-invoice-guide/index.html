@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Primary SEO -->
+  <title>GST Invoice Guide — What Goes Into a Valid GST Invoice | BillGST</title>
+  <meta name="description" content="A practical guide to GST invoices in India. Learn the mandatory fields — GSTIN, HSN/SAC codes, invoice number, CGST, SGST, IGST — and common mistakes to avoid." />
+  <meta name="robots" content="index, follow" />
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://billgst.in/gst-invoice-guide" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/images/icon-512.jpg" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#1E2024" />
+
+  <!-- Open Graph -->
+  <meta property="og:site_name" content="BillGST" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="GST Invoice Guide — What Goes Into a Valid GST Invoice | BillGST" />
+  <meta property="og:description" content="A practical guide to GST invoices in India. Learn the mandatory fields — GSTIN, HSN/SAC codes, invoice number, CGST, SGST, IGST — and common mistakes to avoid." />
+  <meta property="og:url" content="https://billgst.in/gst-invoice-guide" />
+  <meta property="og:image" content="https://billgst.in/images/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="BillGST — GST Invoice Guide for India" />
+  <meta property="og:locale" content="en_IN" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="GST Invoice Guide — What Goes Into a Valid GST Invoice | BillGST" />
+  <meta name="twitter:description" content="A practical guide to GST invoices in India. Mandatory fields, CGST/SGST/IGST, HSN/SAC codes, and common mistakes." />
+  <meta name="twitter:image" content="https://billgst.in/images/og-image.jpg" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://billgst.in/" },
+          { "@type": "ListItem", "position": 2, "name": "GST Invoice Guide", "item": "https://billgst.in/gst-invoice-guide" }
+        ]
+      },
+      {
+        "@type": "Article",
+        "@id": "https://billgst.in/gst-invoice-guide#article",
+        "headline": "GST Invoice Guide — What Goes Into a Valid GST Invoice",
+        "description": "A practical guide to the mandatory fields in an Indian GST tax invoice, including GSTIN, HSN/SAC codes, invoice numbering, CGST, SGST, IGST, and common mistakes.",
+        "url": "https://billgst.in/gst-invoice-guide",
+        "inLanguage": "en-IN",
+        "publisher": {
+          "@type": "Organization",
+          "name": "BillGST",
+          "url": "https://billgst.in/"
+        },
+        "isPartOf": {
+          "@id": "https://billgst.in/#website"
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is a GST invoice?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "A GST invoice (also called a tax invoice) is a document issued by a GST-registered supplier to a buyer. It records the supply of goods or services, the applicable GST, and the total amount due. Under the Goods and Services Tax Act, registered businesses are required to issue tax invoices for taxable supplies."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What is a GSTIN?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "GSTIN stands for Goods and Services Tax Identification Number. It is a 15-character alphanumeric code assigned to every GST-registered business in India. The first two digits represent the state code, the next ten represent the PAN of the business, and the remaining characters indicate the entity type and a check digit."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What is the difference between HSN and SAC?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "HSN (Harmonised System of Nomenclature) codes are used to classify goods. SAC (Services Accounting Code) codes are used to classify services. Both are required on GST invoices to identify the type of supply and the applicable GST rate."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What is the difference between CGST, SGST, and IGST?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "CGST (Central GST) and SGST (State GST) apply to intra-state supplies — when the supplier and buyer are in the same state. The GST rate is split equally between the Centre and the State. IGST (Integrated GST) applies to inter-state supplies — when the supplier and buyer are in different states. The full GST rate is charged as IGST and collected by the Centre."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1E2024; background: #FBFBFC; line-height: 1.6; }
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    a { color: inherit; text-decoration: none; }
+    .container { max-width: 800px; margin: 0 auto; padding: 0 1.25rem; }
+    .container-wide { max-width: 1024px; margin: 0 auto; padding: 0 1.25rem; }
+
+    .site-header { position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,0.96); backdrop-filter: blur(8px); border-bottom: 1px solid #e2e8f0; }
+    .site-header .inner { display: flex; align-items: center; justify-content: space-between; height: 56px; max-width: 1024px; margin: 0 auto; padding: 0 1.25rem; }
+    .logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; color: #0f172a; }
+    .logo-mark { width: 28px; height: 28px; border-radius: 6px; background: #1E2024; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+    .header-nav { display: flex; align-items: center; gap: 4px; }
+    .header-nav a { padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #475569; transition: background 0.15s, color 0.15s; }
+    .header-nav a:hover, .header-nav a[aria-current="page"] { background: #f1f5f9; color: #0f172a; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s, opacity 0.15s; border: none; text-decoration: none; }
+    .btn-primary { background: #1E2024; color: #fff; }
+    .btn-primary:hover { opacity: 0.88; }
+
+    .breadcrumb { padding: 12px 0; font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .breadcrumb a { color: #64748b; transition: color 0.15s; }
+    .breadcrumb a:hover { color: #1E2024; }
+    .breadcrumb-sep { color: #cbd5e1; }
+
+    .divider { border: none; border-top: 1px solid #e2e8f0; margin: 0; }
+
+    /* Article layout */
+    .article-hero { padding: 48px 0 32px; }
+    .article-hero h1 { font-size: clamp(1.5rem, 4vw, 2.2rem); font-weight: 700; line-height: 1.25; color: #0f172a; margin-bottom: 14px; letter-spacing: -0.02em; }
+    .article-hero .lead { font-size: 1rem; color: #475569; line-height: 1.7; margin-bottom: 20px; }
+    .article-meta { font-size: 12px; color: #94a3b8; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+
+    /* Prose styles */
+    .prose { padding: 40px 0; }
+    .prose h2 { font-size: 1.2rem; font-weight: 700; color: #0f172a; margin: 36px 0 12px; padding-top: 4px; border-top: 2px solid #f1f5f9; }
+    .prose h2:first-child { margin-top: 0; border-top: none; }
+    .prose h3 { font-size: 1rem; font-weight: 600; color: #0f172a; margin: 24px 0 8px; }
+    .prose p { font-size: 14px; color: #374151; line-height: 1.75; margin-bottom: 14px; }
+    .prose ul, .prose ol { margin: 12px 0 16px 20px; }
+    .prose li { font-size: 14px; color: #374151; line-height: 1.75; margin-bottom: 6px; }
+    .prose strong { color: #1E2024; }
+    .prose a { color: #1E2024; text-decoration: underline; }
+    .prose a:hover { color: #475569; }
+
+    /* Info boxes */
+    .info-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; font-size: 13px; color: #166534; line-height: 1.6; margin: 20px 0; }
+    .warning-box { background: #fffbeb; border: 1px solid #fed7aa; border-radius: 8px; padding: 16px; font-size: 13px; color: #92400e; line-height: 1.6; margin: 20px 0; }
+    .note-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 13px; color: #475569; line-height: 1.6; margin: 20px 0; }
+
+    /* Field reference table */
+    .field-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0; }
+    .field-table th { background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 14px; font-weight: 600; text-align: left; color: #374151; }
+    .field-table td { border: 1px solid #e2e8f0; padding: 10px 14px; color: #374151; vertical-align: top; }
+    .field-table tr:hover td { background: #f8fafc; }
+    .required-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; background: #fef2f2; color: #dc2626; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .optional-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; background: #f0fdf4; color: #16a34a; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+    /* FAQ */
+    .faq-list { display: flex; flex-direction: column; gap: 16px; }
+    .faq-item { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; }
+    .faq-item h3 { font-size: 14px; font-weight: 600; color: #0f172a; margin-bottom: 8px; }
+    .faq-item p { font-size: 13px; color: #475569; line-height: 1.6; }
+
+    /* CTA inline */
+    .cta-inline { background: #1E2024; border-radius: 10px; padding: 28px; text-align: center; margin: 48px 0; }
+    .cta-inline h2 { color: #fff; font-size: 1.2rem; font-weight: 700; margin-bottom: 10px; }
+    .cta-inline p { color: #94a3b8; font-size: 13px; margin-bottom: 18px; }
+    .btn-cta { background: #fff; color: #1E2024; padding: 10px 24px; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; transition: opacity 0.15s; }
+    .btn-cta:hover { opacity: 0.9; }
+
+    .related-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+    .related-link { font-size: 13px; color: #1E2024; font-weight: 500; padding: 6px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; transition: background 0.15s; }
+    .related-link:hover { background: #f1f5f9; }
+
+    .site-footer { border-top: 1px solid #e2e8f0; background: #fff; padding: 20px 0; font-size: 12px; color: #94a3b8; margin-top: auto; }
+    .site-footer .inner { display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: space-between; max-width: 1024px; margin: 0 auto; padding: 0 1.25rem; }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: center; }
+    .footer-links a { color: #94a3b8; transition: color 0.15s; }
+    .footer-links a:hover { color: #475569; }
+
+    @media (min-width: 640px) { .site-footer .inner { flex-direction: row; } }
+    @media (max-width: 640px) { .header-nav { display: none; } .article-hero { padding: 32px 0 24px; } }
+  </style>
+</head>
+<body>
+
+  <header class="site-header" role="banner">
+    <div>
+      <div class="inner">
+        <a href="/" class="logo" aria-label="BillGST home">
+          <span class="logo-mark">₹</span>
+          <span>BillGST</span>
+        </a>
+        <nav class="header-nav" aria-label="Main navigation">
+          <a href="/gst-invoice-generator">Generator</a>
+          <a href="/gst-invoice-pdf">PDF Invoices</a>
+          <a href="/gst-invoice-guide" aria-current="page">GST Guide</a>
+        </nav>
+        <a href="/" class="btn btn-primary">Open App</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <div class="container">
+
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="/">Home</a>
+        <span class="breadcrumb-sep" aria-hidden="true">›</span>
+        <span aria-current="page">GST Invoice Guide</span>
+      </nav>
+
+      <!-- Article hero -->
+      <header class="article-hero">
+        <h1>What Goes Into a Valid GST Invoice?</h1>
+        <p class="lead">
+          If your business is registered under GST in India, you are required to issue a tax invoice for each taxable supply.
+          This guide explains what a GST invoice is, which fields are mandatory, and what CGST, SGST, IGST, HSN, and SAC actually mean.
+        </p>
+        <div class="article-meta">
+          <span>Published by BillGST</span>
+          <span>·</span>
+          <span>Updated September 2026</span>
+        </div>
+      </header>
+
+      <hr class="divider" />
+
+      <!-- Article body -->
+      <article class="prose" itemscope itemtype="https://schema.org/Article">
+
+        <h2>What is a GST invoice?</h2>
+        <p>
+          A GST invoice — formally called a tax invoice — is a document issued by a GST-registered supplier to a buyer when a taxable supply of goods or services takes place.
+          It records what was supplied, how much it costs, and how much GST is charged.
+        </p>
+        <p>
+          Under the CGST Act 2017, a registered taxable person must issue a tax invoice when making a taxable supply.
+          The invoice serves as the basis for the buyer to claim Input Tax Credit (ITC), so accuracy matters.
+        </p>
+
+        <div class="info-box">
+          <strong>Note on Input Tax Credit:</strong> The buyer can only claim ITC if they hold a valid tax invoice issued by a registered supplier. Errors or missing fields on the invoice can affect ITC claims.
+        </div>
+
+        <h2>Who needs to issue a GST invoice?</h2>
+        <p>Any business registered under GST that makes a taxable supply of goods or services. Composition scheme taxpayers issue a Bill of Supply instead of a tax invoice, and cannot charge GST on it.</p>
+        <p>If you are a freelancer, consultant, or small business registered under regular (non-composition) GST, you need to issue a proper tax invoice.</p>
+
+        <h2>Mandatory fields on a GST invoice</h2>
+        <p>Rule 46 of the CGST Rules specifies the mandatory information that must appear on a tax invoice. BillGST includes all of the following fields.</p>
+
+        <div style="overflow-x: auto;">
+          <table class="field-table" aria-label="Mandatory GST invoice fields">
+            <thead>
+              <tr>
+                <th scope="col">Field</th>
+                <th scope="col">What it is</th>
+                <th scope="col">Required?</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Supplier name and address</strong></td>
+                <td>Your registered business name and address</td>
+                <td><span class="required-tag">Required</span></td>
+              </tr>
+              <tr>
+                <td><strong>Supplier GSTIN</strong></td>
+                <td>Your 15-character GST Identification Number</td>
+                <td><span class="required-tag">Required</span></td>
+              </tr>
+              <tr>
+                <td><strong>Invoice number</strong></td>
+                <td>A consecutive number unique within the financial year (e.g. INV/26-27/001)</td>
+                <td><span class="required-tag">Required</span></td>
+              </tr>
+              <tr>
+                <td><strong>Invoice date</strong></td>
+                <td>The date the invoice is issued</td>
+                <td><span class="required-tag">Required</span></td>
+              </tr>
+              <tr>
+                <td><strong>Recipient name and address</strong></td>
+                <td>Your customer's name and billing address</td>
+                <td><span class="required-tag">Required</span></td>
+              </tr>
+              <tr>
+                <td><strong>Recipient GSTIN</strong></td>
+                <td>Customer's GSTIN, if they are GST-registered</td>
+                <td>Required if recipient is registered</td>
+              </tr>
+              <tr>
+                <td><strong>Place of supply</strong></td>
+                <td>The state where the supply is deemed to take place (determines intra/inter-state)</td>
+                <td><span class="required-tag">Required</span></td>
+              </tr>
+              <tr>
+                <td><strong>HSN / SAC code</strong></td>
+                <td>Goods classification code (HSN) or service classification code (SAC)</td>
+                <td>Required based on turnover threshold</td>
+              </tr>
+              <tr>
+                <td><strong>Description of goods/services</strong></td>
+                <td>Name or description of each line item</td>
+                <td><span class="required-tag">Required</span></td>
+              </tr>
+              <tr>
+                <td><strong>Quantity and unit</strong></td>
+                <td>Quantity supplied and the unit of measure</td>
+                <td><span class="required-tag">Required</span></td>
+              </tr>
+              <tr>
+                <td><strong>Taxable value</strong></td>
+                <td>The value of supply on which GST is calculated (before GST)</td>
+                <td><span class="required-tag">Required</span></td>
+              </tr>
+              <tr>
+                <td><strong>GST rate and amount</strong></td>
+                <td>The applicable GST rate (0%, 5%, 12%, 18%, 28%) and the tax amount</td>
+                <td><span class="required-tag">Required</span></td>
+              </tr>
+              <tr>
+                <td><strong>CGST / SGST / IGST split</strong></td>
+                <td>Tax split as CGST+SGST (intra-state) or IGST (inter-state)</td>
+                <td><span class="required-tag">Required</span></td>
+              </tr>
+              <tr>
+                <td><strong>Total invoice value</strong></td>
+                <td>Sum of taxable value and all applicable taxes</td>
+                <td><span class="required-tag">Required</span></td>
+              </tr>
+              <tr>
+                <td><strong>Bank details</strong></td>
+                <td>Account number, IFSC, UPI ID</td>
+                <td><span class="optional-tag">Optional</span></td>
+              </tr>
+              <tr>
+                <td><strong>Notes / terms</strong></td>
+                <td>Payment terms, notes to buyer</td>
+                <td><span class="optional-tag">Optional</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="warning-box">
+          <strong>Important:</strong> This guide is for general reference. GST rules can change. For your specific business situation — especially around ITC claims, reverse charge, or exemptions — consult a qualified Chartered Accountant or GST practitioner. Always check the current <a href="https://www.gst.gov.in/" target="_blank" rel="noopener noreferrer">GST portal</a> for authoritative rules.
+        </div>
+
+        <h2>What is a GSTIN?</h2>
+        <p>
+          GSTIN stands for <strong>Goods and Services Tax Identification Number</strong>. It is a unique 15-character alphanumeric code assigned to every registered GST taxpayer in India.
+        </p>
+        <p>The format of a GSTIN is:</p>
+        <ul>
+          <li><strong>Characters 1–2:</strong> State code (e.g. 27 for Maharashtra, 07 for Delhi)</li>
+          <li><strong>Characters 3–12:</strong> PAN of the taxpayer</li>
+          <li><strong>Character 13:</strong> Entity number (1–9 or A–Z, for multiple registrations in the same state)</li>
+          <li><strong>Character 14:</strong> Always 'Z'</li>
+          <li><strong>Character 15:</strong> Check digit</li>
+        </ul>
+        <p>
+          BillGST checks the <strong>format</strong> of a GSTIN you enter — structure, length, and state code — but it does not connect to government records to verify whether the GSTIN is currently active.
+          To verify an active GST registration, use the official <a href="https://www.gst.gov.in/commonhome" target="_blank" rel="noopener noreferrer">GST portal search</a>.
+        </p>
+
+        <h2>CGST, SGST, and IGST — what's the difference?</h2>
+
+        <h3>CGST and SGST (intra-state supply)</h3>
+        <p>
+          When the supplier and the buyer are in the <strong>same state</strong>, GST is split between the Centre and the State.
+          Half goes to the Central government as <strong>CGST</strong>, and the other half goes to the State government as <strong>SGST</strong>.
+        </p>
+        <p>Example: An 18% GST invoice for an intra-state transaction becomes 9% CGST + 9% SGST.</p>
+
+        <h3>IGST (inter-state supply)</h3>
+        <p>
+          When the supplier and the buyer are in <strong>different states</strong>, the full GST rate is charged as <strong>IGST</strong> (Integrated GST). The Centre collects it and distributes the state's share separately.
+        </p>
+        <p>Example: An 18% GST invoice for an inter-state transaction becomes 18% IGST.</p>
+
+        <p>BillGST automatically applies the correct tax type based on the states you enter for your business and your customer.</p>
+
+        <h2>What are HSN and SAC codes?</h2>
+
+        <h3>HSN — for goods</h3>
+        <p>
+          HSN stands for <strong>Harmonised System of Nomenclature</strong>. It is an internationally standardised system used to classify traded goods.
+          Under GST, goods are classified using HSN codes. The number of digits required depends on the annual turnover of the registered business.
+        </p>
+
+        <h3>SAC — for services</h3>
+        <p>
+          SAC stands for <strong>Services Accounting Code</strong>. It is India's system for classifying services under GST.
+          Every type of service has an SAC code. For example, the SAC for IT software services is 998313; for web design, it is 998314.
+        </p>
+        <p>
+          If you provide professional services, consulting, design, software, or similar work, you will use SAC codes on your invoice — not HSN codes.
+          BillGST supports both HSN and SAC codes on each line item.
+        </p>
+
+        <h2>What is the invoice number format?</h2>
+        <p>
+          GST rules require invoice numbers to be consecutive within a financial year, and they must not repeat. A common format used in India is:
+        </p>
+        <div class="note-box">
+          <strong>Example format:</strong> <code style="font-family: monospace; background: #e2e8f0; padding: 2px 6px; border-radius: 4px;">INV/26-27/001</code>
+          <br />Where <em>26-27</em> is the financial year and <em>001</em> is the sequential number.
+        </div>
+        <p>
+          BillGST generates sequential invoice numbers automatically. You can configure the prefix and starting number in Settings.
+        </p>
+
+        <h2>GST slab rates</h2>
+        <p>India has five GST rate slabs:</p>
+        <ul>
+          <li><strong>0%</strong> — Exempt or nil-rated goods and services</li>
+          <li><strong>5%</strong> — Essential goods and some services</li>
+          <li><strong>12%</strong> — A range of goods and services</li>
+          <li><strong>18%</strong> — Standard rate, commonly applied to professional services</li>
+          <li><strong>28%</strong> — Luxury goods and certain specified items</li>
+        </ul>
+        <p>
+          The correct rate for your specific goods or services is determined by government GST schedules.
+          If you are unsure which rate applies to your work, consult the
+          <a href="https://www.cbic-gst.gov.in/gst-goods-services-rates.html" target="_blank" rel="noopener noreferrer">CBIC GST rates page</a> or a tax professional.
+        </p>
+
+        <h2>Common mistakes on GST invoices</h2>
+        <ul>
+          <li><strong>Missing or incorrect GSTIN</strong> — The buyer cannot claim ITC without a valid supplier GSTIN on the invoice.</li>
+          <li><strong>Wrong place of supply</strong> — Determines whether CGST+SGST or IGST applies. A mistake here means tax goes to the wrong authority.</li>
+          <li><strong>Non-sequential invoice numbers</strong> — GST rules require consecutive numbering within a financial year. Gaps or restarts can cause issues during GST return filing.</li>
+          <li><strong>Missing HSN/SAC codes</strong> — Required based on your annual turnover. Check current thresholds on the GST portal.</li>
+          <li><strong>Arithmetic errors</strong> — Manually calculated invoices are prone to errors. BillGST calculates all taxes automatically.</li>
+          <li><strong>Incorrect state codes</strong> — GSTIN starts with a state code. A wrong state code means the GSTIN is structurally invalid.</li>
+        </ul>
+
+      </article>
+
+      <hr class="divider" />
+
+      <!-- FAQ section -->
+      <section style="padding: 48px 0;" aria-labelledby="faq-heading">
+        <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; margin-bottom: 8px;">FAQ</div>
+        <h2 style="font-size: 1.4rem; font-weight: 700; color: #0f172a; margin-bottom: 8px;" id="faq-heading">Frequently asked questions</h2>
+        <div class="faq-list">
+          <div class="faq-item">
+            <h3>What is a GST invoice?</h3>
+            <p>A GST invoice (tax invoice) is a document issued by a GST-registered supplier to a buyer for a taxable supply of goods or services. It shows what was supplied, the taxable value, the GST rate, and the tax amount. The buyer uses it to claim Input Tax Credit.</p>
+          </div>
+          <div class="faq-item">
+            <h3>Is a GST invoice the same as a bill?</h3>
+            <p>In everyday usage, "GST bill" and "GST invoice" refer to the same document. Technically under GST law, a "Bill of Supply" is issued by composition scheme taxpayers who do not charge GST. A "Tax Invoice" is issued by regular taxpayers who charge GST. BillGST generates tax invoices for regular GST-registered businesses.</p>
+          </div>
+          <div class="faq-item">
+            <h3>What is the difference between HSN and SAC codes?</h3>
+            <p>HSN (Harmonised System of Nomenclature) codes classify goods. SAC (Services Accounting Code) codes classify services. If you supply goods, use HSN. If you supply services, use SAC. BillGST supports both on each invoice line item.</p>
+          </div>
+          <div class="faq-item">
+            <h3>What is the difference between CGST, SGST, and IGST?</h3>
+            <p>For intra-state transactions (supplier and buyer in the same state), GST splits into CGST (Central) and SGST (State) at equal rates. For inter-state transactions (different states), the full GST rate is charged as IGST. BillGST determines which to apply based on the states you enter.</p>
+          </div>
+          <div class="faq-item">
+            <h3>Does BillGST verify that a GSTIN is active?</h3>
+            <p>No. BillGST validates the format and structure of a GSTIN — the correct character pattern, length (15 characters), and state code. It does not connect to government databases to verify whether a GSTIN is currently registered and active. To verify active registration, use the official <a href="https://www.gst.gov.in/commonhome" target="_blank" rel="noopener noreferrer" style="color: #1E2024; text-decoration: underline;">GST portal</a>.</p>
+          </div>
+          <div class="faq-item">
+            <h3>Do I need to file this invoice with the GST portal?</h3>
+            <p>BillGST generates your invoice document. GST return filing (GSTR-1, GSTR-3B, etc.) is a separate process done directly on the GST portal or through a GST return filing tool. BillGST does not file returns on your behalf.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- CTA inline -->
+      <div class="cta-inline">
+        <h2>Ready to create a GST invoice?</h2>
+        <p>BillGST handles all the calculations automatically. Just fill in your details and download your PDF.</p>
+        <a href="/" class="btn-cta">Open BillGST →</a>
+      </div>
+
+      <section style="padding: 0 0 48px;" aria-labelledby="related-heading">
+        <h2 style="font-size: 1rem; font-weight: 700; color: #0f172a; margin-bottom: 12px;" id="related-heading">Related pages</h2>
+        <div class="related-links">
+          <a href="/gst-invoice-generator" class="related-link">GST Invoice Generator</a>
+          <a href="/gst-invoice-pdf" class="related-link">GST Invoice PDF</a>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="site-footer" role="contentinfo">
+    <div>
+      <div class="inner">
+        <span><strong style="color: #475569;">BillGST</strong> — Local-First GST Invoicing for India</span>
+        <nav class="footer-links" aria-label="Footer navigation">
+          <a href="/">App</a>
+          <a href="/gst-invoice-generator">Generator</a>
+          <a href="/gst-invoice-pdf">PDF Invoices</a>
+          <a href="/gst-invoice-guide">GST Guide</a>
+        </nav>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

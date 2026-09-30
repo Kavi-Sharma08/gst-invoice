@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   FileText,
   Users,
@@ -42,7 +42,7 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-[#FBFBFC] text-[#1E2024]">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-xs border-b border-slate-200 no-print">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-xs border-b border-slate-200 no-print" role="banner">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-14">
             {/* Logo */}
@@ -58,7 +58,7 @@ export default function App() {
               </button>
 
               {/* Desktop Nav Items */}
-              <nav className="hidden md:flex items-center gap-1">
+              <nav className="hidden md:flex items-center gap-1" aria-label="App navigation">
                 {navItems.map((item) => {
                   const Icon = item.icon;
                   const isActive =
@@ -72,13 +72,14 @@ export default function App() {
                     <button
                       key={item.id}
                       onClick={() => navigate(item.id)}
+                      aria-current={isActive ? 'page' : undefined}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                         isActive
                           ? 'bg-slate-100 text-slate-900'
                           : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                       }`}
                     >
-                      <Icon className="w-3.5 h-3.5" />
+                      <Icon className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>{item.label}</span>
                     </button>
                   );
@@ -147,7 +148,7 @@ export default function App() {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <main id="main-content" className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {currentPage === 'dashboard' && <Dashboard onNavigate={navigate} />}
         {currentPage === 'invoices' && <Invoices onNavigate={navigate} />}
         {currentPage === 'create-invoice' && (
@@ -164,14 +165,19 @@ export default function App() {
         {currentPage === 'settings' && <Settings />}
       </main>
 
-      {/* Subtle, restrained footer */}
-      <footer className="border-t border-slate-200 bg-white py-4 text-xs text-slate-400 no-print">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
+      {/* Footer */}
+      <footer className="border-t border-slate-200 bg-white py-4 text-xs text-slate-400 no-print" role="contentinfo">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>
             <span className="font-semibold text-slate-600">BillGST</span> — Local-First GST Invoicing for India
           </div>
+          <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-400" aria-label="Footer navigation">
+            <a href="/gst-invoice-generator" className="hover:text-slate-600 transition-colors">GST Invoice Generator</a>
+            <a href="/gst-invoice-pdf" className="hover:text-slate-600 transition-colors">PDF Invoices</a>
+            <a href="/gst-invoice-guide" className="hover:text-slate-600 transition-colors">GST Guide</a>
+          </nav>
           <div className="text-[11px] text-slate-400">
-            No accounts • No cloud sync • Private & Offline capable
+            No accounts • No cloud sync • Private &amp; Offline capable
           </div>
         </div>
       </footer>

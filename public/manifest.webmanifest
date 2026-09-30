@@ -1,0 +1,25 @@
+{
+  "name": "BillGST — GST Invoice Generator",
+  "short_name": "BillGST",
+  "description": "Create professional GST invoices for Indian businesses. Local-first, no signup required.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FBFBFC",
+  "theme_color": "#1E2024",
+  "icons": [
+    {
+      "src": "/images/icon-512.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["business", "finance", "productivity"],
+  "lang": "en-IN"
+}

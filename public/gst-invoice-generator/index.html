@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Primary SEO -->
+  <title>GST Invoice Generator for India | BillGST</title>
+  <meta name="description" content="Create GST invoices online with BillGST. Add your customer, list services or products, pick the GST rate, and download a clean PDF invoice — all without signing up." />
+  <meta name="robots" content="index, follow" />
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://billgst.in/gst-invoice-generator" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/images/icon-512.jpg" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#1E2024" />
+
+  <!-- Open Graph -->
+  <meta property="og:site_name" content="BillGST" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="GST Invoice Generator for India | BillGST" />
+  <meta property="og:description" content="Create GST invoices online with BillGST. Add your customer, list services or products, pick the GST rate, and download a clean PDF invoice — all without signing up." />
+  <meta property="og:url" content="https://billgst.in/gst-invoice-generator" />
+  <meta property="og:image" content="https://billgst.in/images/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="BillGST — GST Invoice Generator for India" />
+  <meta property="og:locale" content="en_IN" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="GST Invoice Generator for India | BillGST" />
+  <meta name="twitter:description" content="Create GST invoices online with BillGST. Add your customer, list services or products, pick the GST rate, and download a clean PDF invoice — all without signing up." />
+  <meta name="twitter:image" content="https://billgst.in/images/og-image.jpg" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://billgst.in/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "GST Invoice Generator",
+            "item": "https://billgst.in/gst-invoice-generator"
+          }
+        ]
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "BillGST",
+        "url": "https://billgst.in/",
+        "description": "Local-first GST invoice generator for Indian businesses. Create invoices with CGST, SGST and IGST calculations and download PDF invoices.",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web Browser",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "INR"
+        },
+        "isAccessibleForFree": true,
+        "inLanguage": "en-IN"
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Can I create a GST invoice without signing up?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. BillGST's core invoice creation workflow does not require an account. Your invoice data is stored locally in your browser."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What GST rates does BillGST support?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "BillGST supports the standard GST slab rates: 0%, 5%, 12%, 18%, and 28%. You choose the appropriate rate for each line item."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does BillGST calculate CGST, SGST, and IGST automatically?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. BillGST automatically splits GST into CGST and SGST for intra-state transactions, and applies IGST for inter-state transactions, based on the supplier and customer states you enter."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I add HSN or SAC codes to my invoice?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Each line item on your invoice can include an HSN code (for goods) or SAC code (for services)."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1E2024; background: #FBFBFC; line-height: 1.6; }
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+
+    /* Layout */
+    .container { max-width: 1024px; margin: 0 auto; padding: 0 1.25rem; }
+
+    /* Header */
+    .site-header { position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,0.96); backdrop-filter: blur(8px); border-bottom: 1px solid #e2e8f0; }
+    .site-header .inner { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    .logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; color: #0f172a; }
+    .logo-mark { width: 28px; height: 28px; border-radius: 6px; background: #1E2024; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+    .header-nav { display: flex; align-items: center; gap: 4px; }
+    .header-nav a { display: flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #475569; transition: background 0.15s, color 0.15s; }
+    .header-nav a:hover, .header-nav a[aria-current="page"] { background: #f1f5f9; color: #0f172a; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s, opacity 0.15s; border: none; text-decoration: none; }
+    .btn-primary { background: #1E2024; color: #fff; }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-outline { background: transparent; color: #1E2024; border: 1px solid #cbd5e1; }
+    .btn-outline:hover { background: #f1f5f9; }
+
+    /* Breadcrumb */
+    .breadcrumb { padding: 12px 0; font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .breadcrumb a { color: #64748b; transition: color 0.15s; }
+    .breadcrumb a:hover { color: #1E2024; }
+    .breadcrumb-sep { color: #cbd5e1; }
+
+    /* Hero */
+    .hero { padding: 56px 0 48px; text-align: center; }
+    .hero h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; color: #0f172a; margin-bottom: 16px; }
+    .hero p { font-size: 1rem; color: #475569; max-width: 580px; margin: 0 auto 28px; }
+    .hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
+    .local-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 4px; font-weight: 500; }
+    .green-dot { width: 8px; height: 8px; background: #16a34a; border-radius: 50%; }
+
+    /* How it works */
+    .section { padding: 48px 0; }
+    .section-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; margin-bottom: 8px; }
+    .section-title { font-size: 1.4rem; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
+    .section-sub { font-size: 0.9rem; color: #475569; margin-bottom: 32px; }
+    .divider { border: none; border-top: 1px solid #e2e8f0; margin: 0; }
+
+    /* Steps */
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px; }
+    .step { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; }
+    .step-num { width: 32px; height: 32px; border-radius: 8px; background: #1E2024; color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+    .step h3 { font-size: 14px; font-weight: 600; color: #0f172a; margin-bottom: 6px; }
+    .step p { font-size: 13px; color: #475569; line-height: 1.5; }
+
+    /* Feature grid */
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+    .feature { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; }
+    .feature-icon { font-size: 1.25rem; margin-bottom: 10px; }
+    .feature h3 { font-size: 14px; font-weight: 600; color: #0f172a; margin-bottom: 6px; }
+    .feature p { font-size: 13px; color: #475569; line-height: 1.5; }
+
+    /* GST breakdown */
+    .gst-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .gst-table th { background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 14px; font-weight: 600; text-align: left; color: #374151; }
+    .gst-table td { border: 1px solid #e2e8f0; padding: 10px 14px; color: #374151; }
+    .gst-table tr:hover td { background: #f8fafc; }
+
+    /* FAQ */
+    .faq-list { display: flex; flex-direction: column; gap: 16px; }
+    .faq-item { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; }
+    .faq-item h3 { font-size: 14px; font-weight: 600; color: #0f172a; margin-bottom: 8px; }
+    .faq-item p { font-size: 13px; color: #475569; line-height: 1.6; }
+
+    /* CTA */
+    .cta-section { padding: 56px 0; text-align: center; background: #1E2024; color: #fff; border-radius: 12px; margin: 48px 0; }
+    .cta-section h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 12px; }
+    .cta-section p { font-size: 14px; color: #94a3b8; margin-bottom: 24px; max-width: 460px; margin-left: auto; margin-right: auto; }
+    .btn-cta { background: #fff; color: #1E2024; padding: 10px 24px; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; transition: opacity 0.15s; }
+    .btn-cta:hover { opacity: 0.9; }
+
+    /* Internal links */
+    .related-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+    .related-link { font-size: 13px; color: #1E2024; font-weight: 500; padding: 6px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; transition: background 0.15s; }
+    .related-link:hover { background: #f1f5f9; }
+
+    /* Footer */
+    .site-footer { border-top: 1px solid #e2e8f0; background: #fff; padding: 20px 0; font-size: 12px; color: #94a3b8; margin-top: auto; }
+    .site-footer .inner { display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: space-between; }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: center; }
+    .footer-links a { color: #94a3b8; transition: color 0.15s; }
+    .footer-links a:hover { color: #475569; }
+
+    @media (min-width: 640px) {
+      .site-footer .inner { flex-direction: row; }
+    }
+    @media (max-width: 640px) {
+      .header-nav { display: none; }
+      .hero { padding: 40px 0 32px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Site Header -->
+  <header class="site-header" role="banner">
+    <div class="container">
+      <div class="inner">
+        <a href="/" class="logo" aria-label="BillGST home">
+          <span class="logo-mark">₹</span>
+          <span>BillGST</span>
+        </a>
+        <nav class="header-nav" aria-label="Main navigation">
+          <a href="/gst-invoice-generator" aria-current="page">Generator</a>
+          <a href="/gst-invoice-pdf">PDF Invoices</a>
+          <a href="/gst-invoice-guide">GST Guide</a>
+        </nav>
+        <a href="/" class="btn btn-primary">Open App</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <div class="container">
+
+      <!-- Breadcrumb -->
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="/">Home</a>
+        <span class="breadcrumb-sep" aria-hidden="true">›</span>
+        <span aria-current="page">GST Invoice Generator</span>
+      </nav>
+
+      <!-- Hero -->
+      <section class="hero" aria-labelledby="page-heading">
+        <h1 id="page-heading">GST Invoice Generator<br />for India</h1>
+        <p>Add your business details, your customer, and the services or goods you provided. BillGST calculates GST automatically and generates a clean, print-ready PDF invoice.</p>
+        <div class="hero-actions">
+          <a href="/" class="btn btn-primary">Create an Invoice Now</a>
+          <a href="/gst-invoice-guide" class="btn btn-outline">What goes into a GST invoice?</a>
+        </div>
+        <div style="margin-top: 16px;">
+          <span class="local-badge">
+            <span class="green-dot" aria-hidden="true"></span>
+            Data stored locally · No account needed
+          </span>
+        </div>
+      </section>
+
+      <hr class="divider" />
+
+      <!-- How it works -->
+      <section class="section" aria-labelledby="how-it-works">
+        <div class="section-label">Process</div>
+        <h2 class="section-title" id="how-it-works">How to create a GST invoice</h2>
+        <p class="section-sub">Four steps. No complicated setup.</p>
+
+        <div class="steps">
+          <div class="step">
+            <div class="step-num" aria-hidden="true">1</div>
+            <h3>Set up your business</h3>
+            <p>Enter your business name, GSTIN, address, and state once in Settings. This information appears at the top of every invoice you create.</p>
+          </div>
+          <div class="step">
+            <div class="step-num" aria-hidden="true">2</div>
+            <h3>Add your customer</h3>
+            <p>Enter or select your customer's name, GSTIN, and billing state. BillGST uses the states to determine whether CGST/SGST or IGST applies.</p>
+          </div>
+          <div class="step">
+            <div class="step-num" aria-hidden="true">3</div>
+            <h3>Add line items</h3>
+            <p>Add the services or goods, with HSN/SAC codes, quantities, and rates. Select the applicable GST slab (0%, 5%, 12%, 18%, or 28%). Tax totals are calculated instantly.</p>
+          </div>
+          <div class="step">
+            <div class="step-num" aria-hidden="true">4</div>
+            <h3>Download the PDF</h3>
+            <p>Click Download PDF. The invoice is generated in your browser and saved to your device. No data is sent to a server.</p>
+          </div>
+        </div>
+      </section>
+
+      <hr class="divider" />
+
+      <!-- Features -->
+      <section class="section" aria-labelledby="features-heading">
+        <div class="section-label">Features</div>
+        <h2 class="section-title" id="features-heading">What BillGST includes</h2>
+        <p class="section-sub">Everything for straightforward GST invoicing. Nothing extra.</p>
+
+        <div class="features">
+          <div class="feature">
+            <div class="feature-icon" aria-hidden="true">📄</div>
+            <h3>GST Invoice creation</h3>
+            <p>Create complete tax invoices with all mandatory fields: invoice number, date, supplier GSTIN, customer details, HSN/SAC, taxable value, and GST breakup.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon" aria-hidden="true">🧮</div>
+            <h3>Automatic GST calculation</h3>
+            <p>Enter your rate and quantity. BillGST calculates CGST, SGST, and IGST based on the GST slab and whether the transaction is intra-state or inter-state.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon" aria-hidden="true">👥</div>
+            <h3>Customer management</h3>
+            <p>Save customer details locally so you don't have to re-enter them each time. Quickly pick a saved customer when creating a new invoice.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon" aria-hidden="true">📦</div>
+            <h3>Products &amp; services catalogue</h3>
+            <p>Save frequently billed products or services with their HSN/SAC codes and default GST rates. Reuse them across invoices.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon" aria-hidden="true">🔒</div>
+            <h3>Local-first storage</h3>
+            <p>All invoice data, customer records, and business profiles are stored in your browser's IndexedDB. Nothing leaves your device unless you export a backup.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon" aria-hidden="true">💾</div>
+            <h3>Backup and restore</h3>
+            <p>Export your data as a JSON file at any time and restore it later. Useful if you switch browsers or devices.</p>
+          </div>
+        </div>
+      </section>
+
+      <hr class="divider" />
+
+      <!-- GST Breakdown Table -->
+      <section class="section" aria-labelledby="gst-breakdown">
+        <div class="section-label">GST Tax Types</div>
+        <h2 class="section-title" id="gst-breakdown">CGST, SGST and IGST explained</h2>
+        <p class="section-sub">BillGST determines the right tax type based on your state and your customer's state.</p>
+
+        <div style="overflow-x: auto;">
+          <table class="gst-table" aria-label="GST tax type breakdown">
+            <thead>
+              <tr>
+                <th scope="col">Tax Type</th>
+                <th scope="col">When it applies</th>
+                <th scope="col">How it's split</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>CGST + SGST</strong></td>
+                <td>Supplier and customer are in the <strong>same state</strong> (intra-state)</td>
+                <td>GST rate is split equally — half to Centre (CGST), half to State (SGST)</td>
+              </tr>
+              <tr>
+                <td><strong>IGST</strong></td>
+                <td>Supplier and customer are in <strong>different states</strong> (inter-state)</td>
+                <td>Full GST rate applied as Integrated GST (collected by Centre)</td>
+              </tr>
+              <tr>
+                <td><strong>GST Slabs</strong></td>
+                <td>Depends on goods/services category</td>
+                <td>0%, 5%, 12%, 18%, or 28%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p style="margin-top: 14px; font-size: 13px; color: #64748b;">
+          BillGST automatically applies CGST+SGST or IGST based on the states you enter.
+          For questions about which GST rate applies to your goods or services, consult the
+          <a href="https://www.cbic-gst.gov.in/" target="_blank" rel="noopener noreferrer" style="color: #1E2024; text-decoration: underline;">CBIC GST portal</a>
+          or a qualified tax professional.
+        </p>
+      </section>
+
+      <hr class="divider" />
+
+      <!-- FAQ -->
+      <section class="section" aria-labelledby="faq-heading">
+        <div class="section-label">FAQ</div>
+        <h2 class="section-title" id="faq-heading">Frequently asked questions</h2>
+
+        <div class="faq-list">
+          <div class="faq-item">
+            <h3>Can I create a GST invoice without signing up?</h3>
+            <p>Yes. BillGST's core invoice creation workflow does not require an account. Open the app and start creating invoices immediately. Your data is saved to your browser's local storage.</p>
+          </div>
+          <div class="faq-item">
+            <h3>Where is my invoice data stored?</h3>
+            <p>In your browser's IndexedDB storage on this device. BillGST does not sync your data to any server. If you clear your browser data, your invoices will be deleted — so export a backup regularly.</p>
+          </div>
+          <div class="faq-item">
+            <h3>Does BillGST verify my GSTIN against government records?</h3>
+            <p>No. BillGST checks the structure and format of a GSTIN (15 characters, correct pattern), but it does not connect to government systems to verify whether the registration is active. Format validation is not the same as verifying GST registration status.</p>
+          </div>
+          <div class="faq-item">
+            <h3>Can I use BillGST for services (not just goods)?</h3>
+            <p>Yes. Each line item supports HSN codes (for goods) and SAC codes (for services). BillGST works for consultants, freelancers, and service-based businesses.</p>
+          </div>
+          <div class="faq-item">
+            <h3>What GST rates does BillGST support?</h3>
+            <p>0% (exempt/nil rated), 5%, 12%, 18%, and 28%. You choose the applicable rate for each line item on your invoice.</p>
+          </div>
+          <div class="faq-item">
+            <h3>Can I back up my invoices?</h3>
+            <p>Yes. Go to Settings → Backup &amp; Restore and click Download JSON Backup. This exports all your invoices, customers, and business profiles to a JSON file you can store safely.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- CTA -->
+      <div class="cta-section">
+        <h2>Ready to create your first GST invoice?</h2>
+        <p>Open BillGST, add your details, and download your invoice as a PDF.</p>
+        <a href="/" class="btn-cta">Open BillGST →</a>
+      </div>
+
+      <!-- Internal links -->
+      <section class="section" aria-labelledby="related-heading">
+        <h2 class="section-title" id="related-heading" style="font-size: 1rem;">Related pages</h2>
+        <div class="related-links">
+          <a href="/gst-invoice-pdf" class="related-link">GST Invoice PDF generation</a>
+          <a href="/gst-invoice-guide" class="related-link">GST Invoice guide</a>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Site Footer -->
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <div class="inner">
+        <span><strong style="color: #475569;">BillGST</strong> — Local-First GST Invoicing for India</span>
+        <nav class="footer-links" aria-label="Footer navigation">
+          <a href="/">App</a>
+          <a href="/gst-invoice-generator">Generator</a>
+          <a href="/gst-invoice-pdf">PDF Invoices</a>
+          <a href="/gst-invoice-guide">GST Guide</a>
+        </nav>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

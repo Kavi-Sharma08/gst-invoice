@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+Allow: /gst-invoice-generator
+Allow: /gst-invoice-pdf
+Allow: /gst-invoice-guide
+
+# Application pages — not useful for search engines
+Disallow: /dashboard
+Disallow: /create-invoice
+Disallow: /edit-invoice
+Disallow: /invoice-details
+Disallow: /invoices
+Disallow: /customers
+Disallow: /products
+Disallow: /settings
+
+Sitemap: https://billgst.in/sitemap.xml

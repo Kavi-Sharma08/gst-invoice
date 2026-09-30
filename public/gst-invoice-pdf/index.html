@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Primary SEO -->
+  <title>GST Invoice PDF Generator — Download Your Invoice | BillGST</title>
+  <meta name="description" content="Generate and download your GST invoice as a PDF directly from your browser. BillGST creates clean, print-ready invoices with GSTIN, HSN/SAC, CGST/SGST/IGST breakup, and all mandatory fields." />
+  <meta name="robots" content="index, follow" />
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://billgst.in/gst-invoice-pdf" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/images/icon-512.jpg" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#1E2024" />
+
+  <!-- Open Graph -->
+  <meta property="og:site_name" content="BillGST" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="GST Invoice PDF Generator — Download Your Invoice | BillGST" />
+  <meta property="og:description" content="Generate and download your GST invoice as a PDF directly from your browser. BillGST creates clean, print-ready invoices with GSTIN, HSN/SAC, CGST/SGST/IGST breakup, and all mandatory fields." />
+  <meta property="og:url" content="https://billgst.in/gst-invoice-pdf" />
+  <meta property="og:image" content="https://billgst.in/images/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="BillGST — GST Invoice Generator for India" />
+  <meta property="og:locale" content="en_IN" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="GST Invoice PDF Generator — Download Your Invoice | BillGST" />
+  <meta name="twitter:description" content="Generate and download your GST invoice as a PDF directly from your browser." />
+  <meta name="twitter:image" content="https://billgst.in/images/og-image.jpg" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://billgst.in/" },
+          { "@type": "ListItem", "position": 2, "name": "GST Invoice PDF", "item": "https://billgst.in/gst-invoice-pdf" }
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Can I download the GST invoice as a PDF?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Once your invoice is complete, click the Download PDF button. The PDF is generated in your browser using jsPDF and saved directly to your device."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What does the BillGST invoice PDF contain?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The PDF includes your business name, GSTIN, address; customer name, GSTIN, address; invoice number and date; line items with HSN/SAC codes, quantities, unit prices, and GST rates; a tax summary showing CGST, SGST, and IGST; and the total invoice value."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is data sent to a server when generating the PDF?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. The PDF is generated entirely in your browser. Your invoice data is not uploaded to any server during PDF generation."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1E2024; background: #FBFBFC; line-height: 1.6; }
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    a { color: inherit; text-decoration: none; }
+    .container { max-width: 1024px; margin: 0 auto; padding: 0 1.25rem; }
+    .site-header { position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,0.96); backdrop-filter: blur(8px); border-bottom: 1px solid #e2e8f0; }
+    .site-header .inner { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    .logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; color: #0f172a; }
+    .logo-mark { width: 28px; height: 28px; border-radius: 6px; background: #1E2024; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+    .header-nav { display: flex; align-items: center; gap: 4px; }
+    .header-nav a { display: flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #475569; transition: background 0.15s, color 0.15s; }
+    .header-nav a:hover, .header-nav a[aria-current="page"] { background: #f1f5f9; color: #0f172a; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s, opacity 0.15s; border: none; text-decoration: none; }
+    .btn-primary { background: #1E2024; color: #fff; }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-outline { background: transparent; color: #1E2024; border: 1px solid #cbd5e1; }
+    .btn-outline:hover { background: #f1f5f9; }
+    .breadcrumb { padding: 12px 0; font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .breadcrumb a { color: #64748b; transition: color 0.15s; }
+    .breadcrumb a:hover { color: #1E2024; }
+    .breadcrumb-sep { color: #cbd5e1; }
+    .hero { padding: 56px 0 48px; text-align: center; }
+    .hero h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; color: #0f172a; margin-bottom: 16px; }
+    .hero p { font-size: 1rem; color: #475569; max-width: 580px; margin: 0 auto 28px; }
+    .hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
+    .section { padding: 48px 0; }
+    .section-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; margin-bottom: 8px; }
+    .section-title { font-size: 1.4rem; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
+    .section-sub { font-size: 0.9rem; color: #475569; margin-bottom: 32px; }
+    .divider { border: none; border-top: 1px solid #e2e8f0; margin: 0; }
+
+    /* Invoice preview mockup */
+    .invoice-mockup { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 24px; font-size: 12px; max-width: 520px; margin: 0 auto; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+    .inv-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1E2024; padding-bottom: 12px; margin-bottom: 14px; }
+    .inv-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; }
+    .inv-num { font-size: 14px; font-weight: 700; font-family: monospace; color: #0f172a; }
+    .inv-section { margin-bottom: 12px; }
+    .inv-section strong { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8; display: block; margin-bottom: 3px; }
+    .inv-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .inv-table th { border-bottom: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .inv-table td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; }
+    .inv-total-row { background: #f8fafc; font-weight: 700; }
+    .tax-row { color: #475569; font-size: 11px; }
+
+    /* What's included checklist */
+    .checklist { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+    .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #374151; }
+    .checklist li::before { content: "✓"; font-weight: 700; color: #16a34a; margin-top: 1px; flex-shrink: 0; }
+
+    /* FAQ */
+    .faq-list { display: flex; flex-direction: column; gap: 16px; }
+    .faq-item { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; }
+    .faq-item h3 { font-size: 14px; font-weight: 600; color: #0f172a; margin-bottom: 8px; }
+    .faq-item p { font-size: 13px; color: #475569; line-height: 1.6; }
+
+    /* CTA */
+    .cta-section { padding: 56px 0; text-align: center; background: #1E2024; color: #fff; border-radius: 12px; margin: 48px 0; }
+    .cta-section h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 12px; }
+    .cta-section p { font-size: 14px; color: #94a3b8; margin-bottom: 24px; max-width: 460px; margin-left: auto; margin-right: auto; }
+    .btn-cta { background: #fff; color: #1E2024; padding: 10px 24px; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; transition: opacity 0.15s; }
+    .btn-cta:hover { opacity: 0.9; }
+    .related-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+    .related-link { font-size: 13px; color: #1E2024; font-weight: 500; padding: 6px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; transition: background 0.15s; }
+    .related-link:hover { background: #f1f5f9; }
+    .site-footer { border-top: 1px solid #e2e8f0; background: #fff; padding: 20px 0; font-size: 12px; color: #94a3b8; margin-top: auto; }
+    .site-footer .inner { display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: space-between; }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: center; }
+    .footer-links a { color: #94a3b8; transition: color 0.15s; }
+    .footer-links a:hover { color: #475569; }
+
+    @media (min-width: 640px) { .site-footer .inner { flex-direction: row; } }
+    @media (max-width: 640px) { .header-nav { display: none; } .hero { padding: 40px 0 32px; } }
+  </style>
+</head>
+<body>
+
+  <header class="site-header" role="banner">
+    <div class="container">
+      <div class="inner">
+        <a href="/" class="logo" aria-label="BillGST home">
+          <span class="logo-mark">₹</span>
+          <span>BillGST</span>
+        </a>
+        <nav class="header-nav" aria-label="Main navigation">
+          <a href="/gst-invoice-generator">Generator</a>
+          <a href="/gst-invoice-pdf" aria-current="page">PDF Invoices</a>
+          <a href="/gst-invoice-guide">GST Guide</a>
+        </nav>
+        <a href="/" class="btn btn-primary">Open App</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <div class="container">
+
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="/">Home</a>
+        <span class="breadcrumb-sep" aria-hidden="true">›</span>
+        <span aria-current="page">GST Invoice PDF</span>
+      </nav>
+
+      <section class="hero" aria-labelledby="page-heading">
+        <h1 id="page-heading">Download Your GST Invoice as a PDF</h1>
+        <p>BillGST generates a clean, structured PDF invoice directly in your browser. No server upload. No account needed. Just download and send.</p>
+        <div class="hero-actions">
+          <a href="/" class="btn btn-primary">Create and Download an Invoice</a>
+          <a href="/gst-invoice-guide" class="btn btn-outline">What should a GST invoice contain?</a>
+        </div>
+      </section>
+
+      <hr class="divider" />
+
+      <!-- Invoice mockup -->
+      <section class="section" aria-labelledby="preview-heading">
+        <div class="section-label">What you get</div>
+        <h2 class="section-title" id="preview-heading">What the invoice PDF looks like</h2>
+        <p class="section-sub">A structured, print-ready invoice with all the GST-required fields.</p>
+
+        <div class="invoice-mockup" aria-label="Sample invoice structure">
+          <div class="inv-header">
+            <div>
+              <div class="inv-title">Tax Invoice</div>
+              <div style="font-weight: 700; font-size: 14px; margin-top: 2px;">Apex Digital Studios</div>
+              <div style="color: #64748b; font-size: 11px;">GSTIN: 27AAAAA0000A1Z5 · Maharashtra</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="inv-num">INV/26-27/001</div>
+              <div style="color: #64748b; font-size: 11px;">Date: 30 Sep 2026</div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+            <div class="inv-section">
+              <strong>Bill To</strong>
+              <div style="font-weight: 600;">Bravo Technologies</div>
+              <div style="color: #64748b; font-size: 11px;">GSTIN: 07BBBBB0000B1Z3</div>
+              <div style="color: #64748b; font-size: 11px;">Delhi</div>
+            </div>
+            <div class="inv-section">
+              <strong>Invoice Details</strong>
+              <div style="color: #64748b; font-size: 11px;">Place of Supply: Delhi</div>
+              <div style="color: #64748b; font-size: 11px;">Tax Type: IGST</div>
+            </div>
+          </div>
+
+          <table class="inv-table" aria-label="Sample invoice line items">
+            <thead>
+              <tr>
+                <th scope="col">Description</th>
+                <th scope="col">SAC</th>
+                <th scope="col" style="text-align: right;">Qty</th>
+                <th scope="col" style="text-align: right;">Rate</th>
+                <th scope="col" style="text-align: right;">IGST 18%</th>
+                <th scope="col" style="text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Web Design Services</td>
+                <td>998314</td>
+                <td style="text-align: right;">1</td>
+                <td style="text-align: right;">₹50,000</td>
+                <td style="text-align: right; color: #64748b;">₹9,000</td>
+                <td style="text-align: right; font-weight: 600;">₹59,000</td>
+              </tr>
+              <tr class="tax-row">
+                <td colspan="5" style="text-align: right; color: #64748b;">Taxable Amount</td>
+                <td style="text-align: right;">₹50,000</td>
+              </tr>
+              <tr class="tax-row">
+                <td colspan="5" style="text-align: right; color: #64748b;">IGST @ 18%</td>
+                <td style="text-align: right;">₹9,000</td>
+              </tr>
+              <tr class="inv-total-row">
+                <td colspan="5" style="text-align: right;">Grand Total</td>
+                <td style="text-align: right; font-family: monospace;">₹59,000</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="divider" />
+
+      <!-- What's included -->
+      <section class="section" aria-labelledby="included-heading">
+        <div class="section-label">PDF Contents</div>
+        <h2 class="section-title" id="included-heading">What's included in every invoice PDF</h2>
+        <p class="section-sub">Every field required for a valid GST invoice, in a clean layout.</p>
+
+        <ul class="checklist" role="list">
+          <li>Supplier name, GSTIN, address, and state</li>
+          <li>Customer name, GSTIN, address, and state</li>
+          <li>Invoice number and invoice date</li>
+          <li>Place of supply</li>
+          <li>Line items with HSN/SAC codes</li>
+          <li>Quantity and unit price per item</li>
+          <li>GST rate per line item</li>
+          <li>CGST and SGST amounts (intra-state)</li>
+          <li>IGST amount (inter-state)</li>
+          <li>Taxable amount and total tax</li>
+          <li>Grand total in rupees</li>
+          <li>Total in words</li>
+          <li>Bank account details (optional)</li>
+          <li>Notes and payment terms (optional)</li>
+        </ul>
+      </section>
+
+      <hr class="divider" />
+
+      <!-- How PDF works -->
+      <section class="section" aria-labelledby="how-pdf-heading">
+        <div class="section-label">How It Works</div>
+        <h2 class="section-title" id="how-pdf-heading">How the PDF is generated</h2>
+        <p class="section-sub">Entirely in your browser. No data leaves your device.</p>
+
+        <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 24px; font-size: 13px; color: #374151; line-height: 1.7;">
+          <p>When you click <strong>Download PDF</strong> in BillGST, the application uses <strong>jsPDF</strong> — a JavaScript library that runs entirely in your browser — to compose the invoice layout and convert it to a PDF file.</p>
+          <br />
+          <p>The PDF is saved directly to your device's download folder. No data is uploaded to a server, and no third-party service is involved in generating the file.</p>
+          <br />
+          <p>You can print the invoice directly from the PDF, or attach it to an email. The layout is designed to print correctly on A4 paper.</p>
+        </div>
+      </section>
+
+      <hr class="divider" />
+
+      <!-- FAQ -->
+      <section class="section" aria-labelledby="faq-heading">
+        <div class="section-label">FAQ</div>
+        <h2 class="section-title" id="faq-heading">Questions about invoice PDFs</h2>
+
+        <div class="faq-list">
+          <div class="faq-item">
+            <h3>Can I download the GST invoice as a PDF?</h3>
+            <p>Yes. Once your invoice is complete, click the Download PDF button on the invoice page. The PDF is saved directly to your device.</p>
+          </div>
+          <div class="faq-item">
+            <h3>Is my invoice data sent to a server when generating the PDF?</h3>
+            <p>No. The PDF is generated entirely in your browser using JavaScript. Your invoice data is not uploaded anywhere during this process.</p>
+          </div>
+          <div class="faq-item">
+            <h3>Can I print the invoice?</h3>
+            <p>Yes. You can print directly from BillGST using the Print button, which opens your browser's print dialog with a clean invoice layout. You can also open the downloaded PDF in any PDF viewer and print from there.</p>
+          </div>
+          <div class="faq-item">
+            <h3>What paper size does the invoice use?</h3>
+            <p>The invoice is designed for A4 paper, which is the standard for business documents in India.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- CTA -->
+      <div class="cta-section">
+        <h2>Generate your GST invoice PDF now</h2>
+        <p>Create an invoice in BillGST and download it as a PDF — without an account.</p>
+        <a href="/" class="btn-cta">Open BillGST →</a>
+      </div>
+
+      <section class="section" aria-labelledby="related-heading">
+        <h2 class="section-title" id="related-heading" style="font-size: 1rem;">Related pages</h2>
+        <div class="related-links">
+          <a href="/gst-invoice-generator" class="related-link">GST Invoice Generator</a>
+          <a href="/gst-invoice-guide" class="related-link">GST Invoice Guide</a>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <div class="inner">
+        <span><strong style="color: #475569;">BillGST</strong> — Local-First GST Invoicing for India</span>
+        <nav class="footer-links" aria-label="Footer navigation">
+          <a href="/">App</a>
+          <a href="/gst-invoice-generator">Generator</a>
+          <a href="/gst-invoice-pdf">PDF Invoices</a>
+          <a href="/gst-invoice-guide">GST Guide</a>
+        </nav>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
