@@ -1,32 +1,52 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Eye, Edit3, Copy, Download, Trash2, FileText } from 'lucide-react';
+import { Plus, Search, Eye, Edit3, Copy, Download, Trash2, FileText, Cloud, HardDrive } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { InvoiceStatusBadge } from '../components/ui/Badge';
+import { useAuth } from '../context/AuthContext';
+import { invoicesApi } from '../api/invoices.api';
 import { getInvoices, deleteInvoice, duplicateInvoice } from '../db/invoices';
 import { getSettings } from '../db/settings';
 import { generateNextInvoiceNumber } from '../utils/invoiceNumber';
-import { generateInvoicePDF } from '../pdf/generateInvoicePDF';
 import { formatCurrency } from '../utils/currency';
 import { formatDate } from '../utils/date';
+import { useDebounce } from '../utils/useDebounce';
+import { useAppNavigate } from '../utils/navigation';
 
-export function Invoices({ onNavigate }) {
+export function Invoices({ onNavigate: propOnNavigate }) {
+  const appNavigate = useAppNavigate();
+  const onNavigate = propOnNavigate || appNavigate;
+  const { isAuthenticated } = useAuth();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('ALL');
 
   useEffect(() => {
     loadInvoices();
-  }, [search, statusFilter]);
+  }, [debouncedSearch, statusFilter, isAuthenticated]);
 
   const loadInvoices = async () => {
     try {
       setLoading(true);
+      if (isAuthenticated) {
+        try {
+          const params = {};
+          if (debouncedSearch) params.search = debouncedSearch;
+          if (statusFilter !== 'ALL') params.status = statusFilter;
+          const res = await invoicesApi.list(params);
+          setInvoices(Array.isArray(res?.data) ? res.data : []);
+          return;
+        } catch (apiErr) {
+          console.warn('API error, falling back to local database:', apiErr);
+        }
+      }
+
       const list = await getInvoices({
-        search,
+        search: debouncedSearch,
         status: statusFilter
       });
-      setInvoices(list);
+      setInvoices(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error('Failed to load invoices:', err);
     } finally {
@@ -34,30 +54,47 @@ export function Invoices({ onNavigate }) {
     }
   };
 
-  const handleDownloadPDF = (invoice) => {
-    generateInvoicePDF(invoice, { action: 'download' });
+  const handleDownloadPDF = async (invoice) => {
+    try {
+      const { generateInvoicePDF } = await import('../pdf/generateInvoicePDF');
+      generateInvoicePDF(invoice, { action: 'download' });
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+      alert('Failed to generate invoice PDF.');
+    }
   };
 
   const handleDuplicate = async (invoice) => {
     try {
-      const settings = await getSettings();
-      const allInvoices = await getInvoices();
-      const newNum = generateNextInvoiceNumber(
-        settings.invoicePrefix,
-        settings.startingNumber,
-        allInvoices
-      );
-      const dup = await duplicateInvoice(invoice.id, newNum);
-      onNavigate('edit-invoice', dup.id);
+      const targetId = invoice._id || invoice.id;
+      if (isAuthenticated && invoice._id) {
+        const res = await invoicesApi.duplicate(targetId);
+        onNavigate('edit-invoice', res?.data?._id);
+      } else {
+        const settings = await getSettings();
+        const allInvoices = await getInvoices();
+        const newNum = generateNextInvoiceNumber(
+          settings.invoicePrefix,
+          settings.startingNumber,
+          allInvoices
+        );
+        const dup = await duplicateInvoice(targetId, newNum);
+        onNavigate('edit-invoice', dup.id);
+      }
     } catch (err) {
       alert(err.message || 'Failed to duplicate invoice');
     }
   };
 
-  const handleDelete = async (id, num) => {
-    if (window.confirm(`Are you sure you want to delete invoice ${num}? This cannot be undone.`)) {
+  const handleDelete = async (invoice) => {
+    const targetId = invoice._id || invoice.id;
+    if (window.confirm(`Are you sure you want to delete invoice ${invoice.invoiceNumber}? This cannot be undone.`)) {
       try {
-        await deleteInvoice(id);
+        if (isAuthenticated && invoice._id) {
+          await invoicesApi.delete(targetId);
+        } else {
+          await deleteInvoice(targetId);
+        }
         loadInvoices();
       } catch (err) {
         alert(err.message || 'Failed to delete invoice');
@@ -70,7 +107,18 @@ export function Invoices({ onNavigate }) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">Invoices</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">Invoices</h1>
+            {isAuthenticated ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                <Cloud className="w-3 h-3 text-emerald-600" /> Cloud
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                <HardDrive className="w-3 h-3 text-slate-500" /> Local
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-500 mt-0.5">
             Manage your issued and draft GST invoices
           </p>
@@ -145,80 +193,83 @@ export function Invoices({ onNavigate }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {invoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-slate-50/60 transition-colors">
-                  <td className="py-3 px-4 font-mono font-medium text-slate-900">
-                    <button
-                      onClick={() => onNavigate('invoice-details', inv.id)}
-                      className="hover:underline text-slate-900 text-left cursor-pointer"
-                    >
-                      {inv.invoiceNumber}
-                    </button>
-                  </td>
-                  <td className="py-3 px-3 text-slate-600">
-                    {formatDate(inv.invoiceDate)}
-                  </td>
-                  <td className="py-3 px-3 font-medium text-slate-800">
-                    <div>{inv.customer?.name || 'Walk-in Customer'}</div>
-                    {inv.customer?.gstin && (
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        {inv.customer.gstin}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 px-3 text-right font-mono text-slate-600">
-                    {formatCurrency(inv.taxableAmount)}
-                  </td>
-                  <td className="py-3 px-3 text-right font-mono text-slate-600">
-                    {formatCurrency(inv.totalTax)}
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
-                    {formatCurrency(inv.netTotal ?? inv.grandTotal)}
-                  </td>
-                  <td className="py-3 px-3 text-center">
-                    <InvoiceStatusBadge status={inv.status} />
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1">
+              {invoices.map((inv) => {
+                const targetId = inv._id || inv.id;
+                return (
+                  <tr key={targetId} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-3 px-4 font-mono font-medium text-slate-900">
                       <button
-                        onClick={() => onNavigate('invoice-details', inv.id)}
-                        className="p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 cursor-pointer"
-                        title="View"
+                        onClick={() => onNavigate('invoice-details', targetId)}
+                        className="hover:underline text-slate-900 text-left cursor-pointer"
                       >
-                        <Eye className="w-3.5 h-3.5" />
+                        {inv.invoiceNumber}
                       </button>
-                      <button
-                        onClick={() => onNavigate('edit-invoice', inv.id)}
-                        className="p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 cursor-pointer"
-                        title="Edit"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDownloadPDF(inv)}
-                        className="p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 cursor-pointer"
-                        title="Download PDF"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDuplicate(inv)}
-                        className="p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 cursor-pointer"
-                        title="Duplicate"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(inv.id, inv.invoiceNumber)}
-                        className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 cursor-pointer"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="py-3 px-3 text-slate-600">
+                      {formatDate(inv.invoiceDate)}
+                    </td>
+                    <td className="py-3 px-3 font-medium text-slate-800">
+                      <div>{inv.customer?.name || 'Walk-in Customer'}</div>
+                      {inv.customer?.gstin && (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {inv.customer.gstin}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono text-slate-600">
+                      {formatCurrency(inv.taxableAmount)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono text-slate-600">
+                      {formatCurrency(inv.totalTax)}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                      {formatCurrency(inv.netTotal ?? inv.grandTotal)}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <InvoiceStatusBadge status={inv.status} />
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => onNavigate('invoice-details', targetId)}
+                          className="p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 cursor-pointer"
+                          title="View"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => onNavigate('edit-invoice', targetId)}
+                          className="p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 cursor-pointer"
+                          title="Edit"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDownloadPDF(inv)}
+                          className="p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 cursor-pointer"
+                          title="Download PDF"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDuplicate(inv)}
+                          className="p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 cursor-pointer"
+                          title="Duplicate"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(inv)}
+                          className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 cursor-pointer"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -226,3 +277,5 @@ export function Invoices({ onNavigate }) {
     </div>
   );
 }
+
+export default Invoices;

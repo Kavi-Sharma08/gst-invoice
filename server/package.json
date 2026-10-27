@@ -1,18 +1,26 @@
 {
   "name": "server",
   "version": "1.0.0",
-  "main": "index.js",
+  "type": "module",
+  "main": "src/app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "node --watch src/app.js",
+    "start": "node src/app.js",
+    "build": "echo 'No build step required for ESM'",
+    "test": "vitest run"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
+    "@clerk/express": "^2.1.84",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^18.0.9",
     "express": "^5.3.0",
-    "mongoose": "^9.11.4"
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.11.4",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1",
+    "vitest": "^5.0.5"
   }
 }

@@ -4,7 +4,6 @@ import { Button } from '../ui/Button';
 import { formatCurrency, numberToWords } from '../../utils/currency';
 import { formatDate } from '../../utils/date';
 import { getStateByName, getStateByCode } from '../../gst/taxRules';
-import { generateInvoicePDF } from '../../pdf/generateInvoicePDF';
 
 export function InvoicePreviewModal({ isOpen, onClose, invoice }) {
   if (!isOpen || !invoice) return null;
@@ -14,8 +13,14 @@ export function InvoicePreviewModal({ isOpen, onClose, invoice }) {
   const items = invoice.items || [];
   const taxType = invoice.taxType || 'INTRA';
 
-  const handleDownload = () => {
-    generateInvoicePDF(invoice, { action: 'download' });
+  const handleDownload = async () => {
+    try {
+      const { generateInvoicePDF } = await import('../../pdf/generateInvoicePDF');
+      generateInvoicePDF(invoice, { action: 'download' });
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+      alert('Failed to generate invoice PDF.');
+    }
   };
 
   const handlePrint = () => {
@@ -193,7 +198,7 @@ export function InvoicePreviewModal({ isOpen, onClose, invoice }) {
                       <td className="py-2 px-2 border border-slate-200 text-center text-slate-400 font-mono">
                         {idx + 1}
                       </td>
-                      <td className="py-2 px-3 border border-slate-200 font-medium text-slate-800">
+                      <td className="py-2 px-3 border border-slate-200 font-medium text-slate-800 whitespace-pre-line">
                         {item.description}
                       </td>
                       <td className="py-2 px-2 border border-slate-200 text-center font-mono text-slate-600">

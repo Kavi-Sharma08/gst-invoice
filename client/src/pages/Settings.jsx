@@ -7,12 +7,15 @@ import { Alert } from '../components/ui/Alert';
 import { getBusinessProfile, saveBusinessProfile } from '../db/business';
 import { getSettings, saveSettings } from '../db/settings';
 import { exportBackup, importBackup } from '../db/backup';
+import { useAuth } from '../context/AuthContext';
+import { businessApi } from '../api/business.api';
 import { INDIAN_STATES, getStateByCode } from '../gst/taxRules';
 import { validateGSTIN } from '../gst/validateGSTIN';
 import { generateNextInvoiceNumber } from '../utils/invoiceNumber';
 import { getInvoices } from '../db/invoices';
 
 export function Settings() {
+  const { isAuthenticated } = useAuth();
   const fileInputRef = useRef(null);
 
   // Business Profile
@@ -53,16 +56,42 @@ export function Settings() {
 
   useEffect(() => {
     loadAll();
-  }, []);
+  }, [isAuthenticated]);
 
   const loadAll = async () => {
     try {
       setLoading(true);
-      const [biz, sets, invList] = await Promise.all([
+      let biz = null;
+      let sets = null;
+
+      if (isAuthenticated) {
+        try {
+          const res = await businessApi.get();
+          if (res?.data) {
+            biz = res.data;
+            if (biz.invoiceSettings) {
+              sets = {
+                invoicePrefix: biz.invoiceSettings.invoicePrefix || 'INV/26-27/',
+                startingNumber: biz.invoiceSettings.startingNumber || 1,
+                defaultNotes: biz.invoiceSettings.defaultNotes || '',
+                defaultTerms: biz.invoiceSettings.defaultTerms || '',
+                bankDetails: biz.bankDetails || {}
+              };
+            }
+          }
+        } catch (apiErr) {
+          console.warn('API fetch failed, falling back to local DB:', apiErr);
+        }
+      }
+
+      const [localBiz, localSets, invList] = await Promise.all([
         getBusinessProfile(),
         getSettings(),
         getInvoices()
       ]);
+
+      if (!biz) biz = localBiz;
+      if (!sets) sets = localSets;
 
       if (biz) {
         setBusiness(biz);
@@ -73,7 +102,7 @@ export function Settings() {
       if (sets) {
         setSettings(sets);
       }
-      setInvoices(invList);
+      setInvoices(invList || []);
     } catch (err) {
       console.error('Failed to load settings:', err);
     } finally {
@@ -118,6 +147,13 @@ export function Settings() {
 
     try {
       setSavingBiz(true);
+      if (isAuthenticated) {
+        await businessApi.save({
+          ...business,
+          invoiceSettings: settings,
+          bankDetails: settings.bankDetails
+        });
+      }
       await saveBusinessProfile(business);
       setBizMessage({ type: 'success', text: 'Business profile saved successfully.' });
       setTimeout(() => setBizMessage(null), 4000);
@@ -134,6 +170,13 @@ export function Settings() {
 
     try {
       setSavingSettings(true);
+      if (isAuthenticated) {
+        await businessApi.save({
+          ...business,
+          invoiceSettings: settings,
+          bankDetails: settings.bankDetails
+        });
+      }
       await saveSettings(settings);
       setSettingsMessage({ type: 'success', text: 'Settings and numbering saved successfully.' });
       setTimeout(() => setSettingsMessage(null), 4000);
@@ -499,3 +542,5 @@ export function Settings() {
     </div>
   );
 }
+
+export default Settings;

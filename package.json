@@ -1,0 +1,21 @@
+{
+  "name": "billgst-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "worker"
+  ],
+  "scripts": {
+    "dev:client": "npm --workspace=client run dev",
+    "dev:server": "npm --workspace=server run dev",
+    "dev:worker": "npm --workspace=worker run dev",
+    "build:client": "npm --workspace=client run build",
+    "build:server": "npm --workspace=server run build",
+    "build:worker": "npm --workspace=worker run build",
+    "test:client": "npm --workspace=client run test",
+    "test:server": "npm --workspace=server run test",
+    "test:worker": "npm --workspace=worker run test"
+  }
+}

@@ -1,28 +1,103 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Download, Printer, Edit3, Copy, Trash2, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  ArrowLeft,
+  Download,
+  Printer,
+  Edit3,
+  Copy,
+  Trash2,
+  CheckCircle2,
+  Mail,
+  Send,
+  Loader2,
+  AlertCircle,
+  Clock,
+  XCircle,
+  RefreshCw,
+  X
+} from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
 import { InvoiceStatusBadge } from '../components/ui/Badge';
+import { useAuth } from '../context/AuthContext';
+import { invoicesApi } from '../api/invoices.api';
 import { getInvoiceById, updateInvoice, deleteInvoice, duplicateInvoice, getInvoices } from '../db/invoices';
 import { getSettings } from '../db/settings';
 import { generateNextInvoiceNumber } from '../utils/invoiceNumber';
-import { generateInvoicePDF } from '../pdf/generateInvoicePDF';
-import { formatCurrency, numberToWords } from '../utils/currency';
 import { formatDate } from '../utils/date';
 import { getStateByName, getStateByCode } from '../gst/taxRules';
+import { useParams } from 'react-router-dom';
+import { useAppNavigate } from '../utils/navigation';
 
-export function InvoiceDetails({ invoiceId, onNavigate }) {
+export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNavigate }) {
+  const params = useParams();
+  const appNavigate = useAppNavigate();
+  const onNavigate = propOnNavigate || appNavigate;
+  const invoiceId = propInvoiceId || params.id;
+  const { isAuthenticated } = useAuth();
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Email modal and delivery status state
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailForm, setEmailForm] = useState({
+    recipientEmail: '',
+    recipientName: '',
+    subject: '',
+    message: ''
+  });
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailFeedback, setEmailFeedback] = useState(null);
+  const [deliveryStatus, setDeliveryStatus] = useState(null);
+  const pollingRef = useRef(null);
+
   useEffect(() => {
     loadInvoice();
-  }, [invoiceId]);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [invoiceId, isAuthenticated]);
 
   const loadInvoice = async () => {
     try {
       setLoading(true);
-      const data = await getInvoiceById(invoiceId);
+      let data = null;
+
+      if (isAuthenticated) {
+        try {
+          const res = await invoicesApi.get(invoiceId);
+          data = res?.data || null;
+        } catch (err) {
+          console.warn('Could not load invoice from API, falling back to local storage:', err);
+        }
+      }
+
+      if (!data) {
+        data = await getInvoiceById(invoiceId);
+      }
+
       setInvoice(data);
+
+      if (data) {
+        setEmailForm({
+          recipientEmail: data.customer?.email || '',
+          recipientName: data.customer?.name || '',
+          subject: `Invoice ${data.invoiceNumber} from ${data.business?.businessName || 'Business'}`,
+          message: `Dear ${data.customer?.name || 'Customer'},\n\nPlease find attached details for Tax Invoice ${data.invoiceNumber}.\nTotal Amount: ₹${Number(data.netTotal ?? data.grandTotal).toFixed(2)}.\n\nThank you for your business!`
+        });
+
+        // Initialize delivery status if available on model
+        if (data.emailDeliveryStatus && data.emailDeliveryStatus !== 'NOT_QUEUED') {
+          setDeliveryStatus({
+            status: data.emailDeliveryStatus,
+            recipientEmail: data.emailLastSentTo,
+            sentAt: data.emailLastSentAt
+          });
+          if (['PENDING', 'PROCESSING', 'RETRY_SCHEDULED'].includes(data.emailDeliveryStatus)) {
+            startPollingStatus(invoiceId);
+          }
+        }
+      }
     } catch (err) {
       console.error('Failed to load invoice:', err);
     } finally {
@@ -30,9 +105,35 @@ export function InvoiceDetails({ invoiceId, onNavigate }) {
     }
   };
 
-  const handleDownloadPDF = () => {
+  const startPollingStatus = (id) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await invoicesApi.getEmailStatus(id);
+        const job = res?.data;
+        if (job) {
+          setDeliveryStatus(job);
+          if (['SENT', 'FAILED_PERMANENTLY', 'CANCELLED'].includes(job.status)) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to poll email status:', err);
+      }
+    }, 4000);
+  };
+
+  const handleDownloadPDF = async () => {
     if (!invoice) return;
-    generateInvoicePDF(invoice, { action: 'download' });
+    try {
+      const { generateInvoicePDF } = await import('../pdf/generateInvoicePDF');
+      generateInvoicePDF(invoice, { action: 'download' });
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+      alert('Failed to generate invoice PDF.');
+    }
   };
 
   const handlePrint = () => {
@@ -41,26 +142,38 @@ export function InvoiceDetails({ invoiceId, onNavigate }) {
 
   const handleStatusToggle = async () => {
     if (!invoice) return;
+    const targetId = invoice._id || invoice.id;
     const newStatus = invoice.status === 'Paid' ? 'Issued' : 'Paid';
+
     try {
-      await updateInvoice(invoice.id, { status: newStatus });
+      if (isAuthenticated && invoice._id) {
+        await invoicesApi.update(targetId, { status: newStatus });
+      } else {
+        await updateInvoice(targetId, { status: newStatus });
+      }
       setInvoice({ ...invoice, status: newStatus });
-    } catch (err) {
+    } catch {
       alert('Failed to update status');
     }
   };
 
   const handleDuplicate = async () => {
     try {
-      const settings = await getSettings();
-      const allInvoices = await getInvoices();
-      const newNum = generateNextInvoiceNumber(
-        settings.invoicePrefix,
-        settings.startingNumber,
-        allInvoices
-      );
-      const dup = await duplicateInvoice(invoice.id, newNum);
-      onNavigate('edit-invoice', dup.id);
+      const targetId = invoice._id || invoice.id;
+      if (isAuthenticated && invoice._id) {
+        const res = await invoicesApi.duplicate(targetId);
+        onNavigate('edit-invoice', res?.data?._id);
+      } else {
+        const settings = await getSettings();
+        const allInvoices = await getInvoices();
+        const newNum = generateNextInvoiceNumber(
+          settings.invoicePrefix,
+          settings.startingNumber,
+          allInvoices
+        );
+        const dup = await duplicateInvoice(targetId, newNum);
+        onNavigate('edit-invoice', dup.id);
+      }
     } catch (err) {
       alert(err.message || 'Failed to duplicate invoice');
     }
@@ -69,7 +182,12 @@ export function InvoiceDetails({ invoiceId, onNavigate }) {
   const handleDelete = async () => {
     if (window.confirm(`Are you sure you want to delete invoice ${invoice.invoiceNumber}?`)) {
       try {
-        await deleteInvoice(invoice.id);
+        const targetId = invoice._id || invoice.id;
+        if (isAuthenticated && invoice._id) {
+          await invoicesApi.delete(targetId);
+        } else {
+          await deleteInvoice(targetId);
+        }
         onNavigate('invoices');
       } catch (err) {
         alert(err.message || 'Failed to delete invoice');
@@ -77,15 +195,67 @@ export function InvoiceDetails({ invoiceId, onNavigate }) {
     }
   };
 
+  const handleSendEmail = async (e) => {
+    e.preventDefault();
+    if (!invoice) return;
+
+    if (!isAuthenticated) {
+      alert('Email delivery requires a free BillGST account. Please sign in or create an account first.');
+      onNavigate('login');
+      return;
+    }
+
+    const targetId = invoice._id || invoice.id;
+    setIsSendingEmail(true);
+    setEmailFeedback(null);
+
+    try {
+      const res = await invoicesApi.sendEmail(targetId, {
+        recipientEmail: emailForm.recipientEmail,
+        recipientName: emailForm.recipientName,
+        subject: emailForm.subject,
+        message: emailForm.message
+      });
+
+      setEmailFeedback({
+        type: 'success',
+        message: 'Email has been queued for delivery! The email worker will process and dispatch it shortly.'
+      });
+
+      setDeliveryStatus({
+        status: 'PENDING',
+        recipientEmail: emailForm.recipientEmail,
+        attempts: 0
+      });
+
+      startPollingStatus(targetId);
+      setTimeout(() => {
+        setIsEmailModalOpen(false);
+      }, 2000);
+    } catch (err) {
+      setEmailFeedback({
+        type: 'error',
+        message: err.message || 'Failed to enqueue invoice email. Please check the recipient address.'
+      });
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
   if (loading) {
-    return <div className="p-8 text-center text-xs text-slate-500">Loading invoice...</div>;
+    return (
+      <div className="p-12 text-center text-xs text-slate-500 flex flex-col items-center justify-center gap-2">
+        <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+        <span>Loading invoice details...</span>
+      </div>
+    );
   }
 
   if (!invoice) {
     return (
       <div className="p-8 text-center text-xs text-slate-500">
         Invoice not found.{' '}
-        <button onClick={() => onNavigate('dashboard')} className="underline text-slate-800">
+        <button onClick={() => onNavigate('dashboard')} className="underline text-slate-800 cursor-pointer">
           Go back to dashboard
         </button>
       </div>
@@ -122,6 +292,17 @@ export function InvoiceDetails({ invoiceId, onNavigate }) {
         </div>
 
         <div className="flex items-center flex-wrap gap-2">
+          {/* Email button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsEmailModalOpen(true)}
+            className="text-xs bg-slate-900 text-white hover:bg-slate-800 border-slate-900"
+          >
+            <Mail className="w-3.5 h-3.5 mr-1" />
+            Send Email
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -134,7 +315,7 @@ export function InvoiceDetails({ invoiceId, onNavigate }) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onNavigate('edit-invoice', invoice.id)}
+            onClick={() => onNavigate('edit-invoice', invoice._id || invoice.id)}
             className="text-xs"
           >
             <Edit3 className="w-3.5 h-3.5 mr-1" />
@@ -176,6 +357,59 @@ export function InvoiceDetails({ invoiceId, onNavigate }) {
           </Button>
         </div>
       </div>
+
+      {/* Live Email Delivery Status Banner */}
+      {deliveryStatus && (
+        <div
+          className={`p-3.5 rounded-lg border text-xs flex items-center justify-between no-print transition-all ${
+            deliveryStatus.status === 'SENT'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : deliveryStatus.status === 'FAILED_PERMANENTLY'
+              ? 'bg-rose-50 border-rose-200 text-rose-900'
+              : deliveryStatus.status === 'RETRY_SCHEDULED'
+              ? 'bg-amber-50 border-amber-200 text-amber-900'
+              : 'bg-blue-50 border-blue-200 text-blue-900'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            {deliveryStatus.status === 'SENT' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : deliveryStatus.status === 'FAILED_PERMANENTLY' ? (
+              <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            ) : deliveryStatus.status === 'RETRY_SCHEDULED' ? (
+              <RefreshCw className="w-4 h-4 text-amber-600 animate-spin shrink-0" />
+            ) : (
+              <Clock className="w-4 h-4 text-blue-600 animate-pulse shrink-0" />
+            )}
+
+            <div>
+              <span className="font-semibold">
+                Email Delivery Status: {deliveryStatus.status}
+              </span>
+              <p className="text-[11px] opacity-90 mt-0.5">
+                {deliveryStatus.status === 'SENT' &&
+                  `Delivered to ${deliveryStatus.recipientEmail || 'customer'} at ${
+                    deliveryStatus.sentAt ? formatDate(deliveryStatus.sentAt) : 'recently'
+                  }.`}
+                {deliveryStatus.status === 'PENDING' &&
+                  `Queued for delivery to ${deliveryStatus.recipientEmail}. Processing worker will deliver shortly.`}
+                {deliveryStatus.status === 'PROCESSING' &&
+                  `Currently transmitting email to ${deliveryStatus.recipientEmail}...`}
+                {deliveryStatus.status === 'RETRY_SCHEDULED' &&
+                  `Temporary delivery failure (attempt ${deliveryStatus.attempts || 1}). Retrying with backoff.`}
+                {deliveryStatus.status === 'FAILED_PERMANENTLY' &&
+                  `Email delivery failed permanently: ${deliveryStatus.lastError || 'Undeliverable'}.`}
+              </p>
+            </div>
+          </div>
+
+          {['PENDING', 'PROCESSING', 'RETRY_SCHEDULED'].includes(deliveryStatus.status) && (
+            <span className="text-[11px] font-mono text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded">
+              Live tracking...
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Embedded Invoice Sheet */}
       <div className="bg-white p-6 sm:p-10 shadow-xs border border-slate-200 rounded-lg text-slate-900 text-xs print-page">
@@ -315,7 +549,7 @@ export function InvoiceDetails({ invoiceId, onNavigate }) {
                   <td className="py-2 px-2 border border-slate-200 text-center text-slate-400 font-mono">
                     {idx + 1}
                   </td>
-                  <td className="py-2 px-3 border border-slate-200 font-medium text-slate-800">
+                  <td className="py-2 px-3 border border-slate-200 font-medium text-slate-800 whitespace-pre-line leading-relaxed">
                     {item.description}
                   </td>
                   <td className="py-2 px-2 border border-slate-200 text-center font-mono text-slate-600">
@@ -454,6 +688,130 @@ export function InvoiceDetails({ invoiceId, onNavigate }) {
           </div>
         </div>
       </div>
+
+      {/* Email Invoice Modal */}
+      {isEmailModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Email Tax Invoice</h3>
+                  <p className="text-[11px] text-slate-500 font-mono">{invoice.invoiceNumber}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsEmailModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendEmail} className="p-5 space-y-3.5 text-xs">
+              {emailFeedback && (
+                <div
+                  className={`p-3 rounded-md text-xs flex items-start gap-2 ${
+                    emailFeedback.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}
+                >
+                  {emailFeedback.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+                  )}
+                  <span>{emailFeedback.message}</span>
+                </div>
+              )}
+
+              <div>
+                <Input
+                  label="Recipient Email"
+                  id="email-recipient"
+                  type="email"
+                  placeholder="customer@example.com"
+                  required
+                  value={emailForm.recipientEmail}
+                  onChange={(e) => setEmailForm({ ...emailForm, recipientEmail: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Input
+                  label="Recipient Name"
+                  id="email-name"
+                  type="text"
+                  placeholder="Customer Name"
+                  value={emailForm.recipientName}
+                  onChange={(e) => setEmailForm({ ...emailForm, recipientName: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Input
+                  label="Subject"
+                  id="email-subject"
+                  type="text"
+                  required
+                  value={emailForm.subject}
+                  onChange={(e) => setEmailForm({ ...emailForm, subject: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Message / Cover Note
+                </label>
+                <textarea
+                  rows={4}
+                  value={emailForm.message}
+                  onChange={(e) => setEmailForm({ ...emailForm, message: e.target.value })}
+                  className="w-full text-xs rounded-md border border-slate-300 p-2.5 text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-800 focus:border-slate-800"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEmailModalOpen(false)}
+                  disabled={isSendingEmail}
+                  className="text-xs"
+                >
+                  Cancel
+                </Button>
+
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isSendingEmail}
+                  className="text-xs bg-slate-900 text-white hover:bg-slate-800"
+                >
+                  {isSendingEmail ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      Queuing...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5 mr-1.5" />
+                      Queue & Send
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+export default InvoiceDetails;

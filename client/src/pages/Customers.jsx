@@ -1,25 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Users, Edit3, Trash2, FilePlus } from 'lucide-react';
+import { Plus, Search, Users, Edit3, Trash2, Cloud, HardDrive } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { CustomerModal } from '../components/customer/CustomerModal';
+import { useAuth } from '../context/AuthContext';
+import { customersApi } from '../api/customers.api';
 import { getCustomers, addCustomer, updateCustomer, deleteCustomer } from '../db/customers';
+import { useDebounce } from '../utils/useDebounce';
+import { useAppNavigate } from '../utils/navigation';
 
-export function Customers({ onNavigate }) {
+export function Customers({ onNavigate: propOnNavigate }) {
+  const appNavigate = useAppNavigate();
+  const onNavigate = propOnNavigate || appNavigate;
+  const { isAuthenticated } = useAuth();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
 
   useEffect(() => {
     loadCustomers();
-  }, [search]);
+  }, [debouncedSearch, isAuthenticated]);
 
   const loadCustomers = async () => {
     try {
       setLoading(true);
-      const list = await getCustomers(search);
-      setCustomers(list);
+      if (isAuthenticated) {
+        try {
+          const res = await customersApi.list({ search: debouncedSearch, limit: 100 });
+          setCustomers(Array.isArray(res?.data) ? res.data : []);
+          return;
+        } catch (apiErr) {
+          console.warn('API error, falling back to local database:', apiErr);
+        }
+      }
+
+      const list = await getCustomers(debouncedSearch);
+      setCustomers(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error('Failed to load customers:', err);
     } finally {
@@ -38,18 +56,37 @@ export function Customers({ onNavigate }) {
   };
 
   const handleSaveCustomer = async (formData) => {
-    if (editingCustomer) {
-      await updateCustomer(editingCustomer.id, formData);
-    } else {
-      await addCustomer(formData);
+    try {
+      const targetId = editingCustomer?._id || editingCustomer?.id;
+      if (isAuthenticated) {
+        if (editingCustomer) {
+          await customersApi.update(targetId, formData);
+        } else {
+          await customersApi.create(formData);
+        }
+      } else {
+        if (editingCustomer) {
+          await updateCustomer(targetId, formData);
+        } else {
+          await addCustomer(formData);
+        }
+      }
+      setIsModalOpen(false);
+      loadCustomers();
+    } catch (err) {
+      alert(err.message || 'Failed to save customer');
     }
-    loadCustomers();
   };
 
-  const handleDeleteCustomer = async (id, name) => {
-    if (window.confirm(`Are you sure you want to delete customer "${name}"?`)) {
+  const handleDeleteCustomer = async (customer) => {
+    const targetId = customer._id || customer.id;
+    if (window.confirm(`Are you sure you want to delete customer "${customer.name}"?`)) {
       try {
-        await deleteCustomer(id);
+        if (isAuthenticated && customer._id) {
+          await customersApi.delete(targetId);
+        } else {
+          await deleteCustomer(targetId);
+        }
         loadCustomers();
       } catch (err) {
         alert(err.message || 'Failed to delete customer');
@@ -62,9 +99,22 @@ export function Customers({ onNavigate }) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">Customers</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">Customers</h1>
+            {isAuthenticated ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                <Cloud className="w-3 h-3 text-emerald-600" /> Cloud
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                <HardDrive className="w-3 h-3 text-slate-500" /> Local
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Client directory stored locally on this machine
+            {isAuthenticated
+              ? 'Client directory stored securely in MongoDB'
+              : 'Client directory stored locally on this machine'}
           </p>
         </div>
         <Button onClick={handleOpenAdd}>
@@ -120,58 +170,61 @@ export function Customers({ onNavigate }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {customers.map((cust) => (
-                <tr key={cust.id} className="hover:bg-slate-50/60 transition-colors">
-                  <td className="py-3 px-4 font-semibold text-slate-900">
-                    <div>{cust.name}</div>
-                    {cust.address && (
-                      <div className="text-[11px] font-normal text-slate-500 line-clamp-1">
-                        {cust.address}
+              {customers.map((cust) => {
+                const targetId = cust._id || cust.id;
+                return (
+                  <tr key={targetId} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-slate-900">
+                      <div>{cust.name}</div>
+                      {cust.address && (
+                        <div className="text-[11px] font-normal text-slate-500 line-clamp-1">
+                          {cust.address}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 font-mono text-slate-700">
+                      {cust.gstin || <span className="text-slate-400 font-sans italic">Not registered</span>}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`inline-block text-[11px] px-2 py-0.5 rounded font-medium ${
+                          cust.customerType === 'B2B'
+                            ? 'bg-blue-50 text-blue-700'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {cust.customerType || (cust.gstin ? 'B2B' : 'B2C')}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-slate-700">
+                      {cust.state || '—'}
+                    </td>
+                    <td className="py-3 px-3 text-slate-600">
+                      {cust.email && <div>{cust.email}</div>}
+                      {cust.phone && <div className="text-[11px] text-slate-400">{cust.phone}</div>}
+                      {!cust.email && !cust.phone && <span className="text-slate-400">—</span>}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleOpenEdit(cust)}
+                          className="p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 cursor-pointer"
+                          title="Edit Customer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCustomer(cust)}
+                          className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 cursor-pointer"
+                          title="Delete Customer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                    )}
-                  </td>
-                  <td className="py-3 px-3 font-mono text-slate-700">
-                    {cust.gstin || <span className="text-slate-400 font-sans italic">Not registered</span>}
-                  </td>
-                  <td className="py-3 px-3">
-                    <span
-                      className={`inline-block text-[11px] px-2 py-0.5 rounded font-medium ${
-                        cust.customerType === 'B2B'
-                          ? 'bg-blue-50 text-blue-700'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {cust.customerType || (cust.gstin ? 'B2B' : 'B2C')}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-slate-700">
-                    {cust.state || '—'}
-                  </td>
-                  <td className="py-3 px-3 text-slate-600">
-                    {cust.email && <div>{cust.email}</div>}
-                    {cust.phone && <div className="text-[11px] text-slate-400">{cust.phone}</div>}
-                    {!cust.email && !cust.phone && <span className="text-slate-400">—</span>}
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => handleOpenEdit(cust)}
-                        className="p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 cursor-pointer"
-                        title="Edit Customer"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCustomer(cust.id, cust.name)}
-                        className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 cursor-pointer"
-                        title="Delete Customer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -187,3 +240,5 @@ export function Customers({ onNavigate }) {
     </div>
   );
 }
+
+export default Customers;

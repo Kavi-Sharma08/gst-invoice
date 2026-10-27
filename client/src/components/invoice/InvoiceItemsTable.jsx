@@ -1,9 +1,44 @@
-import React from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Sparkles } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { GST_RATES } from '../../gst/taxRules';
 import { formatCurrency } from '../../utils/currency';
 import { calculateItemTotal } from '../../gst/calculateGST';
+
+/**
+ * Auto-growing textarea that expands as the user types.
+ * Resets height to 'auto' on each render cycle so scrollHeight is accurate.
+ */
+function AutoGrowTextarea({ value, onChange, placeholder }) {
+  const ref = useRef(null);
+
+  const resize = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  useEffect(() => {
+    resize();
+  }, [value, resize]);
+
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => {
+        onChange(e.target.value);
+        resize();
+      }}
+      onInput={resize}
+      className="w-full text-xs rounded border border-slate-200 px-2 py-1.5 focus:border-slate-800 focus:outline-none placeholder:text-slate-400 resize-none overflow-hidden leading-relaxed min-h-[32px]"
+      style={{ height: 'auto' }}
+    />
+  );
+}
 
 export function InvoiceItemsTable({
   items = [],
@@ -95,17 +130,15 @@ export function InvoiceItemsTable({
               const calc = calculateItemTotal(item, taxType);
 
               return (
-                <tr key={index} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="py-2 px-3 text-center text-slate-400 font-medium">
+                <tr key={index} className="hover:bg-slate-50/50 transition-colors align-top">
+                  <td className="py-2.5 px-3 text-center text-slate-400 font-medium">
                     {index + 1}
                   </td>
                   <td className="py-2 px-3">
-                    <input
-                      type="text"
-                      placeholder="Item or service description"
+                    <AutoGrowTextarea
+                      placeholder="Item or service description (supports multiple lines)"
                       value={item.description || ''}
-                      onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                      className="w-full text-xs rounded border border-slate-200 px-2 py-1.5 focus:border-slate-800 focus:outline-none placeholder:text-slate-400"
+                      onChange={(val) => handleItemChange(index, 'description', val)}
                     />
                   </td>
                   <td className="py-2 px-2">
