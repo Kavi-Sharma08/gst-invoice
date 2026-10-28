@@ -421,7 +421,7 @@ export function generateInvoicePDF(invoice, options = { action: 'download' }) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(148, 163, 184);
-  doc.text('Generated via BillGST — Local-First GST Invoicing', margin, pageHeight - 8);
+  doc.text('Generated via BillGST — Free GST Invoicing for India', margin, pageHeight - 8);
 
   const safeFileName = `${(invoice.invoiceNumber || 'invoice').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
 

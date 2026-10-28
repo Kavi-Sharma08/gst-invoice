@@ -6,7 +6,8 @@ import {
   NavLink,
   Link,
   useNavigate,
-  useLocation
+  useLocation,
+  useParams
 } from 'react-router-dom';
 import {
   FileText,
@@ -15,17 +16,12 @@ import {
   Settings as SettingsIcon,
   LayoutDashboard,
   Plus,
-  ShieldCheck,
-  Cloud,
   Menu,
-  X,
-  LogIn,
-  ChevronDown,
-  Sparkles
+  X
 } from 'lucide-react';
-import { SignedIn, SignedOut, UserButton } from '@clerk/clerk-react';
+import { UserButton } from '@clerk/clerk-react';
 import { useAuth } from './context/AuthContext';
-import { MigrationBanner } from './components/MigrationBanner';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { Button } from './components/ui/Button';
 import { LoadingFallback } from './components/ui/LoadingFallback';
 
@@ -41,9 +37,19 @@ const Settings = lazy(() => import('./pages/Settings'));
 const SignInPage = lazy(() => import('./pages/SignInPage'));
 const SignUpPage = lazy(() => import('./pages/SignUpPage'));
 
-/** Shell that wraps all /app/* routes with the app navbar + footer */
+function LegacyInvoiceRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/app/invoices/${id}`} replace />;
+}
+
+function LegacyInvoiceEditRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/app/invoices/${id}/edit`} replace />;
+}
+
+/** Shell that wraps all authenticated /app/* workspace routes */
 function AppShell() {
-  const { user, isAuthenticated } = useAuth();
+  const { user } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -57,9 +63,6 @@ function AppShell() {
   ];
 
   const isCreatingInvoice = location.pathname === '/app/invoices/new';
-  const isAuthPage =
-    location.pathname.startsWith('/sign-in') ||
-    location.pathname.startsWith('/sign-up');
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F8F9FB] text-[#0B0C0E] antialiased">
@@ -111,36 +114,17 @@ function AppShell() {
               </nav>
             </div>
 
-            {/* Right side: auth & primary action */}
+            {/* Right side: auth user profile & primary action */}
             <div className="hidden sm:flex items-center gap-3">
-              <SignedIn>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-700 font-medium bg-emerald-50/80 border border-emerald-200/70 px-2.5 py-1 rounded-full shadow-2xs">
-                    <Cloud className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span className="truncate max-w-[120px] font-medium">{user?.name || user?.email}</span>
-                  </div>
-                  <UserButton afterSignOutUrl="/app/dashboard" />
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 text-xs text-slate-700 font-medium bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-full shadow-2xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="truncate max-w-[140px] font-medium">{user?.name || user?.email}</span>
                 </div>
-              </SignedIn>
+                <UserButton afterSignOutUrl="/" />
+              </div>
 
-              <SignedOut>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium bg-slate-100/80 border border-slate-200/70 px-2.5 py-1 rounded-full">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>Local Mode</span>
-                  </div>
-                  <Link
-                    to="/sign-in"
-                    id="nav-sign-in-btn"
-                    className="flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-slate-950 px-3 py-1.5 rounded-full border border-slate-200/90 hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition-all shadow-2xs"
-                  >
-                    <LogIn className="w-3.5 h-3.5" />
-                    <span>Sign In</span>
-                  </Link>
-                </div>
-              </SignedOut>
-
-              {!isCreatingInvoice && !isAuthPage && (
+              {!isCreatingInvoice && (
                 <Button size="sm" onClick={() => navigate('/app/invoices/new')} className="text-xs shadow-xs">
                   <Plus className="w-3.5 h-3.5 mr-1" />
                   New Invoice
@@ -150,7 +134,7 @@ function AppShell() {
 
             {/* Mobile menu trigger */}
             <div className="flex items-center sm:hidden gap-2">
-              {!isCreatingInvoice && !isAuthPage && (
+              {!isCreatingInvoice && (
                 <Button size="sm" onClick={() => navigate('/app/invoices/new')} className="text-xs py-1 px-2.5">
                   <Plus className="w-3.5 h-3.5" />
                 </Button>
@@ -187,33 +171,15 @@ function AppShell() {
                 );
               })}
               <div className="pt-2 px-3 flex items-center justify-between text-xs text-slate-500 border-t border-slate-100 mt-2">
-                <SignedIn>
-                  <div className="flex items-center justify-between w-full">
-                    <span className="text-emerald-700 font-medium">
-                      {user?.name || user?.email}
-                    </span>
-                    <UserButton afterSignOutUrl="/app/dashboard" />
-                  </div>
-                </SignedIn>
-                <SignedOut>
-                  <Link
-                    to="/sign-in"
-                    onClick={() => setMobileMenuOpen(false)}
-                    id="mobile-sign-in-btn"
-                    className="text-slate-900 font-semibold flex items-center gap-1.5"
-                  >
-                    <LogIn className="w-3.5 h-3.5" />
-                    <span>Sign In / Register</span>
-                  </Link>
-                </SignedOut>
+                <span className="text-slate-800 font-medium truncate max-w-[180px]">
+                  {user?.name || user?.email}
+                </span>
+                <UserButton afterSignOutUrl="/" />
               </div>
             </div>
           )}
         </div>
       </header>
-
-      {/* Migration Banner */}
-      <MigrationBanner onMigrationSuccess={() => navigate('/app/dashboard')} />
 
       {/* Main Routed Content */}
       <main id="main-content" className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
@@ -251,7 +217,7 @@ function AppShell() {
           </nav>
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            <span>{isAuthenticated ? 'Cloud MongoDB Active' : 'Offline Browser Storage'}</span>
+            <span>MongoDB Connected</span>
           </div>
         </div>
       </footer>
@@ -263,19 +229,29 @@ export default function App() {
   return (
     <Suspense fallback={<LoadingFallback message="Loading..." />}>
       <Routes>
-        {/* Landing page at root */}
+        {/* Public Landing page at root */}
         <Route path="/" element={<LandingPage />} />
 
-        {/* Auth routes */}
+        {/* Public Auth routes */}
         <Route path="/sign-in/*" element={<SignInPage />} />
         <Route path="/sign-up/*" element={<SignUpPage />} />
 
-        {/* App shell wraps all /app/* routes */}
-        <Route path="/app/*" element={<AppShell />} />
+        {/* Protected workspace: all /app/* routes require an authenticated Clerk session */}
+        <Route
+          path="/app/*"
+          element={
+            <ProtectedRoute>
+              <AppShell />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Legacy redirects: old routes now live under /app */}
+        {/* Legacy redirects: map old un-namespaced paths to /app/... */}
         <Route path="/dashboard" element={<Navigate to="/app/dashboard" replace />} />
-        <Route path="/invoices/*" element={<Navigate to="/app/invoices" replace />} />
+        <Route path="/invoices" element={<Navigate to="/app/invoices" replace />} />
+        <Route path="/invoices/new" element={<Navigate to="/app/invoices/new" replace />} />
+        <Route path="/invoices/:id" element={<LegacyInvoiceRedirect />} />
+        <Route path="/invoices/:id/edit" element={<LegacyInvoiceEditRedirect />} />
         <Route path="/customers" element={<Navigate to="/app/customers" replace />} />
         <Route path="/products" element={<Navigate to="/app/products" replace />} />
         <Route path="/settings" element={<Navigate to="/app/settings" replace />} />

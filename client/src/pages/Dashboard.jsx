@@ -7,8 +7,6 @@ import {
   Download,
   Copy,
   Trash2,
-  Cloud,
-  HardDrive,
   TrendingUp,
   AlertCircle,
   CheckCircle2,
@@ -26,12 +24,8 @@ import { InvoiceStatusBadge } from '../components/ui/Badge';
 import { useAuth } from '../context/AuthContext';
 import { invoicesApi } from '../api/invoices.api';
 import { customersApi } from '../api/customers.api';
-import { getInvoices, deleteInvoice, duplicateInvoice } from '../db/invoices';
-import { getCustomers } from '../db/customers';
 import { formatCurrency } from '../utils/currency';
 import { formatDate } from '../utils/date';
-import { generateNextInvoiceNumber } from '../utils/invoiceNumber';
-import { getSettings } from '../db/settings';
 import { useAppNavigate } from '../utils/navigation';
 
 export function Dashboard({ onNavigate: propOnNavigate }) {
@@ -42,6 +36,7 @@ export function Dashboard({ onNavigate: propOnNavigate }) {
   const [invoices, setInvoices] = useState([]);
   const [customersCount, setCustomersCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [timeFilter, setTimeFilter] = useState('6m'); // 'month' | '6m' | 'ytd' | 'all'
   const [chartView, setChartView] = useState('revenue'); // 'revenue' | 'gst'
   const [hoveredBarIndex, setHoveredBarIndex] = useState(null);
@@ -53,28 +48,18 @@ export function Dashboard({ onNavigate: propOnNavigate }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      if (isAuthenticated) {
-        try {
-          const [invRes, custRes] = await Promise.all([
-            invoicesApi.list({ limit: 100 }),
-            customersApi.list({ limit: 100 })
-          ]);
-          setInvoices(Array.isArray(invRes?.data) ? invRes.data : []);
-          setCustomersCount(custRes?.pagination?.total ?? (custRes?.data?.length || 0));
-          return;
-        } catch (apiErr) {
-          console.warn('API error, falling back to local database:', apiErr);
-        }
-      }
-
-      const [invList, custList] = await Promise.all([
-        getInvoices(),
-        getCustomers()
+      setError(null);
+      const [invRes, custRes] = await Promise.all([
+        invoicesApi.list({ limit: 100 }),
+        customersApi.list({ limit: 100 })
       ]);
-      setInvoices(Array.isArray(invList) ? invList : []);
-      setCustomersCount(custList?.length || 0);
+      const invList = Array.isArray(invRes?.data) ? invRes.data : (invRes?.data?.invoices || []);
+      const custList = Array.isArray(custRes?.data) ? custRes.data : (custRes?.data?.customers || []);
+      setInvoices(invList);
+      setCustomersCount(custRes?.data?.total ?? custRes?.pagination?.total ?? custList.length);
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
+      setError(err.message || 'Failed to load dashboard data. Please check your connection.');
     } finally {
       setLoading(false);
     }
@@ -93,20 +78,9 @@ export function Dashboard({ onNavigate: propOnNavigate }) {
   const handleDuplicate = async (invoice) => {
     try {
       const targetId = invoice._id || invoice.id;
-      if (isAuthenticated && invoice._id) {
-        const res = await invoicesApi.duplicate(targetId);
-        onNavigate('edit-invoice', res?.data?._id);
-      } else {
-        const settings = await getSettings();
-        const allInvoices = await getInvoices();
-        const newNum = generateNextInvoiceNumber(
-          settings.invoicePrefix,
-          settings.startingNumber,
-          allInvoices
-        );
-        const dup = await duplicateInvoice(targetId, newNum);
-        onNavigate('edit-invoice', dup.id);
-      }
+      const res = await invoicesApi.duplicate(targetId);
+      const newId = res?.data?._id || res?.data?.id;
+      onNavigate('edit-invoice', newId);
     } catch (err) {
       alert(err.message || 'Failed to duplicate invoice');
     }
@@ -116,12 +90,8 @@ export function Dashboard({ onNavigate: propOnNavigate }) {
     const targetId = invoice._id || invoice.id;
     if (window.confirm(`Are you sure you want to delete invoice ${invoice.invoiceNumber}? This cannot be undone.`)) {
       try {
-        if (isAuthenticated && invoice._id) {
-          await invoicesApi.delete(targetId);
-        } else {
-          await deleteInvoice(targetId);
-        }
-        loadData();
+        await invoicesApi.delete(targetId);
+        await loadData();
       } catch (err) {
         alert(err.message || 'Failed to delete invoice');
       }
@@ -289,15 +259,6 @@ export function Dashboard({ onNavigate: propOnNavigate }) {
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 font-heading">
               Financial Overview
             </h1>
-            {isAuthenticated ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 rounded-full">
-                <Cloud className="w-3 h-3 text-emerald-600" /> Cloud Active
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full">
-                <HardDrive className="w-3 h-3 text-slate-500" /> Local Browser Mode
-              </span>
-            )}
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
             Real-time GST compliance, revenue analytics, and billing control
@@ -337,6 +298,18 @@ export function Dashboard({ onNavigate: propOnNavigate }) {
           </Button>
         </div>
       </div>
+
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadData} className="text-xs">
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* ── Key Stat Cards (Glide Rounded-2xl Cards) ────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

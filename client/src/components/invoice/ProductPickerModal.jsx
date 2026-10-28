@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Check } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { getProducts } from '../../db/products';
+import { productsApi } from '../../api/products.api';
 import { formatCurrency } from '../../utils/currency';
 
 export function ProductPickerModal({ isOpen, onClose, onSelectProduct, onAddNewProduct }) {
@@ -19,10 +19,12 @@ export function ProductPickerModal({ isOpen, onClose, onSelectProduct, onAddNewP
   const loadProducts = async (q) => {
     try {
       setLoading(true);
-      const list = await getProducts(q);
+      const res = await productsApi.list({ search: q, limit: 50 });
+      const list = Array.isArray(res?.data) ? res.data : (res?.data?.products || []);
       setProducts(list);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load products for picker:', err);
+      setProducts([]);
     } finally {
       setLoading(false);
     }

@@ -6,6 +6,7 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { addRipple } from '../components/magicui/ripple';
 
 /* ─── Design tokens (mirrored in CSS vars below) ─────────────────── */
@@ -316,9 +317,13 @@ function LPButton({ children, href, to, shimmer, large, outline, white, onClick,
 
 /* ─── Main Page ─────────────────────────────────────────────────── */
 export default function LandingPage() {
+  const { isAuthenticated } = useAuth();
   const reduced = useReducedMotion();
   const [featRef, featVisible] = useRepeatInView(0.6);
   const [openFaq, setOpenFaq] = useState(null);
+
+  // Authenticated users go straight to dashboard; unauthenticated visitors are directed to sign in
+  const ctaDestination = isAuthenticated ? '/app/dashboard' : '/sign-in';
 
   const toggleFaq = (i) => setOpenFaq(prev => prev === i ? null : i);
 
@@ -333,7 +338,7 @@ export default function LandingPage() {
     },
     {
       q: 'Where is my data stored?',
-      a: "In your own browser on your device. Clear your browser data and it\u2019s gone, so export backups regularly.",
+      a: 'Securely in your cloud database. Access and manage your billing records from any supported device anytime.',
     },
     {
       q: 'Can I use it on my phone?',
@@ -357,7 +362,7 @@ export default function LandingPage() {
             <a href="#how">How it works</a>
             <a href="#faq">FAQ</a>
           </nav>
-          <LPButton to="/app/invoices/new" shimmer>Create invoice</LPButton>
+          <LPButton to={ctaDestination} shimmer>Create invoice</LPButton>
         </div>
       </header>
 
@@ -371,7 +376,7 @@ export default function LandingPage() {
               Professional GST invoices, accurate tax calculations, and simpler billing — all in one place.
             </p>
             <div className="lp-cta">
-              <LPButton to="/app/invoices/new" shimmer large>Create your first invoice</LPButton>
+              <LPButton to={ctaDestination} shimmer large>Create your first invoice</LPButton>
               <LPButton href="#features" outline large>See what's inside</LPButton>
             </div>
             <InvoiceMockup />
@@ -476,7 +481,7 @@ export default function LandingPage() {
           <div className="lp-final">
             <h2 className="lp-final-h2">Your next invoice is 30 seconds away</h2>
             <p>Free for every business, every month. No signup to start.</p>
-            <LPButton to="/app/invoices/new" white large>Create invoice now</LPButton>
+            <LPButton to={ctaDestination} white large>Create invoice now</LPButton>
           </div>
         </div>
       </main>
@@ -500,11 +505,11 @@ export default function LandingPage() {
             </div>
             <div>
               <h5>Your workspace</h5>
-              <Link to="/app/invoices/new">Create invoice</Link>
-              <Link to="/app/dashboard">Dashboard</Link>
+              <Link to={ctaDestination}>Create invoice</Link>
+              <Link to={ctaDestination}>Dashboard</Link>
             </div>
             <div>
-              <h5><Link to="/app/dashboard">Support</Link></h5>
+              <h5><Link to={ctaDestination}>Support</Link></h5>
             </div>
           </div>
           <div className="lp-copy">

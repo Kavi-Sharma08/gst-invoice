@@ -5,20 +5,18 @@ import {
   Users,
   Edit3,
   Trash2,
-  Cloud,
-  HardDrive,
   Building2,
   Mail,
   Phone,
   MapPin,
   X,
-  ShieldCheck
+  ShieldCheck,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { CustomerModal } from '../components/customer/CustomerModal';
 import { useAuth } from '../context/AuthContext';
 import { customersApi } from '../api/customers.api';
-import { getCustomers, addCustomer, updateCustomer, deleteCustomer } from '../db/customers';
 import { useDebounce } from '../utils/useDebounce';
 import { useAppNavigate } from '../utils/navigation';
 
@@ -28,6 +26,7 @@ export function Customers({ onNavigate: propOnNavigate }) {
   const { isAuthenticated } = useAuth();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -40,20 +39,13 @@ export function Customers({ onNavigate: propOnNavigate }) {
   const loadCustomers = async () => {
     try {
       setLoading(true);
-      if (isAuthenticated) {
-        try {
-          const res = await customersApi.list({ search: debouncedSearch, limit: 100 });
-          setCustomers(Array.isArray(res?.data) ? res.data : []);
-          return;
-        } catch (apiErr) {
-          console.warn('API error, falling back to local database:', apiErr);
-        }
-      }
-
-      const list = await getCustomers(debouncedSearch);
-      setCustomers(Array.isArray(list) ? list : []);
+      setError(null);
+      const res = await customersApi.list({ search: debouncedSearch, limit: 100 });
+      const list = Array.isArray(res?.data) ? res.data : (res?.data?.customers || []);
+      setCustomers(list);
     } catch (err) {
       console.error('Failed to load customers:', err);
+      setError(err.message || 'Failed to load customers. Please check your connection.');
     } finally {
       setLoading(false);
     }
@@ -72,18 +64,10 @@ export function Customers({ onNavigate: propOnNavigate }) {
   const handleSaveCustomer = async (formData) => {
     try {
       const targetId = editingCustomer?._id || editingCustomer?.id;
-      if (isAuthenticated) {
-        if (editingCustomer) {
-          await customersApi.update(targetId, formData);
-        } else {
-          await customersApi.create(formData);
-        }
+      if (editingCustomer) {
+        await customersApi.update(targetId, formData);
       } else {
-        if (editingCustomer) {
-          await updateCustomer(targetId, formData);
-        } else {
-          await addCustomer(formData);
-        }
+        await customersApi.create(formData);
       }
       setIsModalOpen(false);
       loadCustomers();
@@ -96,11 +80,7 @@ export function Customers({ onNavigate: propOnNavigate }) {
     const targetId = customer._id || customer.id;
     if (window.confirm(`Are you sure you want to delete customer "${customer.name}"?`)) {
       try {
-        if (isAuthenticated && customer._id) {
-          await customersApi.delete(targetId);
-        } else {
-          await deleteCustomer(targetId);
-        }
+        await customersApi.delete(targetId);
         loadCustomers();
       } catch (err) {
         alert(err.message || 'Failed to delete customer');
@@ -131,6 +111,18 @@ export function Customers({ onNavigate: propOnNavigate }) {
           Add Customer
         </Button>
       </div>
+
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadCustomers} className="text-xs">
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* ── Search Bar ──────────────────────────────────────────────────────── */}
       <div className="relative w-full max-w-md">

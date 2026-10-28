@@ -11,7 +11,6 @@ import { businessRoutes } from './modules/business/business.routes.js';
 import { customerRoutes } from './modules/customers/customers.routes.js';
 import { productRoutes } from './modules/products/products.routes.js';
 import { invoiceRoutes } from './modules/invoices/invoices.routes.js';
-import { migrationRoutes } from './modules/migration/migration.routes.js';
 
 dotenv.config();
 
@@ -38,25 +37,35 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check endpoint mounted before authentication middleware
+app.use('/api/v1/health', healthRoutes);
+
 // Clerk authentication middleware (validates session tokens / cookies)
-if (env.CLERK_SECRET_KEY) {
-  app.use(
-    clerkMiddleware({
-      publishableKey: env.CLERK_PUBLISHABLE_KEY,
-      secretKey: env.CLERK_SECRET_KEY
-    })
-  );
-} else {
-  app.use(clerkMiddleware());
+// Only initialize clerkMiddleware if a valid (non-placeholder) publishable and secret key are configured.
+const hasValidClerkKeys =
+  env.CLERK_SECRET_KEY &&
+  !env.CLERK_SECRET_KEY.includes('placeholder') &&
+  env.CLERK_PUBLISHABLE_KEY &&
+  !env.CLERK_PUBLISHABLE_KEY.includes('placeholder');
+
+if (hasValidClerkKeys) {
+  try {
+    app.use(
+      clerkMiddleware({
+        publishableKey: env.CLERK_PUBLISHABLE_KEY,
+        secretKey: env.CLERK_SECRET_KEY
+      })
+    );
+  } catch (err) {
+    logger.warn('Failed to initialize Clerk middleware:', { error: err.message });
+  }
 }
 
-// ── Routes ─────────────────────────────────────────────────────────────────────
-app.use('/api/v1/health', healthRoutes);
+// ── Authenticated / Domain Routes ──────────────────────────────────────────────
 app.use('/api/v1/business-profile', businessRoutes);
 app.use('/api/v1/customers', customerRoutes);
 app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/invoices', invoiceRoutes);
-app.use('/api/v1/migration', migrationRoutes);
 
 // 404 handler for unknown routes
 app.use((req, res) => {

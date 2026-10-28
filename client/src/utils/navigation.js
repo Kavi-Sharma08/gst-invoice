@@ -2,31 +2,40 @@ import { useNavigate } from 'react-router-dom';
 
 /**
  * Maps legacy page names and IDs to React Router route paths.
+ * All authenticated workspace routes are namespaced under /app.
  * @param {string} page Page name or route path
  * @param {string} [id] Optional resource ID
  * @returns {string} URL path
  */
 export function toAppRoute(page, id = null) {
-  if (!page) return '/dashboard';
-  if (page.startsWith('/')) return page;
+  if (!page) return '/app/dashboard';
+  if (page.startsWith('/')) {
+    // If it starts with /dashboard, /invoices, etc., prefix with /app
+    if (page === '/dashboard' || page.startsWith('/dashboard/')) return `/app${page}`;
+    if (page === '/invoices' || page.startsWith('/invoices/')) return `/app${page}`;
+    if (page === '/customers' || page.startsWith('/customers/')) return `/app${page}`;
+    if (page === '/products' || page.startsWith('/products/')) return `/app${page}`;
+    if (page === '/settings' || page.startsWith('/settings/')) return `/app${page}`;
+    return page;
+  }
 
   switch (page) {
     case 'dashboard':
-      return '/dashboard';
+      return '/app/dashboard';
     case 'invoices':
-      return '/invoices';
+      return '/app/invoices';
     case 'create-invoice':
-      return '/invoices/new';
+      return '/app/invoices/new';
     case 'edit-invoice':
-      return id ? `/invoices/${id}/edit` : '/invoices/new';
+      return id ? `/app/invoices/${id}/edit` : '/app/invoices/new';
     case 'invoice-details':
-      return id ? `/invoices/${id}` : '/invoices';
+      return id ? `/app/invoices/${id}` : '/app/invoices';
     case 'customers':
-      return '/customers';
+      return '/app/customers';
     case 'products':
-      return '/products';
+      return '/app/products';
     case 'settings':
-      return '/settings';
+      return '/app/settings';
     case 'login':
     case 'sign-in':
       return '/sign-in';
@@ -34,7 +43,7 @@ export function toAppRoute(page, id = null) {
     case 'sign-up':
       return '/sign-up';
     default:
-      return `/${page}`;
+      return `/app/${page}`;
   }
 }
 

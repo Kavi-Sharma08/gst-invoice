@@ -14,10 +14,31 @@ const TIMEOUT_MS = 15000;
  */
 async function getClerkToken() {
   try {
-    // window.Clerk is available after ClerkProvider mounts
-    const session = window.Clerk?.session;
-    if (!session) return null;
-    return await session.getToken();
+    if (typeof window === 'undefined') return null;
+
+    // If Clerk is already ready with a session, return token immediately
+    if (window.Clerk?.session) {
+      return await window.Clerk.session.getToken();
+    }
+
+    // If Clerk is mounting, wait briefly (up to 1.5 seconds) for session to resolve
+    if (window.Clerk && !window.Clerk.loaded) {
+      await new Promise((resolve) => {
+        let attempts = 0;
+        const interval = setInterval(() => {
+          attempts++;
+          if (window.Clerk?.loaded || window.Clerk?.session || attempts > 30) {
+            clearInterval(interval);
+            resolve();
+          }
+        }, 50);
+      });
+      if (window.Clerk?.session) {
+        return await window.Clerk.session.getToken();
+      }
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -75,13 +96,31 @@ async function request(path, options = {}) {
 }
 
 export const apiClient = {
-  get: (path, params = {}) => {
-    const qs = new URLSearchParams(
-      Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
-    ).toString();
-    return request(`${path}${qs ? `?${qs}` : ''}`);
+  get: (path, params) => {
+    let url = path;
+    if (params) {
+      const qs = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') {
+          qs.append(k, String(v));
+        }
+      });
+      const str = qs.toString();
+      if (str) url += (url.includes('?') ? '&' : '?') + str;
+    }
+    return request(url, { method: 'GET' });
   },
-  post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
-  patch: (path, body) => request(path, { method: 'PATCH', body: JSON.stringify(body) }),
+  post: (path, body) =>
+    request(path, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  patch: (path, body) =>
+    request(path, {
+      method: 'PATCH',
+      body: JSON.stringify(body)
+    }),
   delete: (path) => request(path, { method: 'DELETE' })
 };
+
+export default apiClient;

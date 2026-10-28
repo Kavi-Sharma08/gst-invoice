@@ -1,40 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { registerSchema, loginSchema } from '../../src/modules/auth/auth.schema.js';
 import { invoiceCreateSchema } from '../../src/modules/invoices/invoices.schema.js';
 import { calculateInvoiceTotal } from '../../src/modules/invoices/invoice-calculation.service.js';
 
 describe('Validation Schemas & Security Protection', () => {
-  describe('auth schemas', () => {
-    it('accepts valid registration data', () => {
-      const valid = {
-        name: 'Sharma Traders',
-        email: 'sharma@example.com',
-        password: 'password123'
-      };
-      const result = registerSchema.safeParse(valid);
-      expect(result.success).toBe(true);
-    });
-
-    it('rejects invalid email and short password', () => {
-      const invalid = {
-        name: 'S',
-        email: 'invalid-email',
-        password: '123'
-      };
-      const result = registerSchema.safeParse(invalid);
-      expect(result.success).toBe(false);
-    });
-
-    it('normalizes email to lowercase and trims whitespace', () => {
-      const input = {
-        email: '  USER@EXAMPLE.COM  ',
-        password: 'password123'
-      };
-      const parsed = loginSchema.parse(input);
-      expect(parsed.email).toBe('user@example.com');
-    });
-  });
-
   describe('invoice creation schema', () => {
     it('accepts valid invoice payload', () => {
       const valid = {

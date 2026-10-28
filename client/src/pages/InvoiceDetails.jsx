@@ -21,9 +21,9 @@ import { Input } from '../components/ui/Input';
 import { InvoiceStatusBadge } from '../components/ui/Badge';
 import { useAuth } from '../context/AuthContext';
 import { invoicesApi } from '../api/invoices.api';
-import { getInvoiceById, updateInvoice, deleteInvoice, duplicateInvoice, getInvoices } from '../db/invoices';
-import { getSettings } from '../db/settings';
-import { generateNextInvoiceNumber } from '../utils/invoiceNumber';
+
+
+
 import { formatDate } from '../utils/date';
 import { getStateByName, getStateByCode } from '../gst/taxRules';
 import { useParams } from 'react-router-dom';
@@ -51,6 +51,8 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
   const [deliveryStatus, setDeliveryStatus] = useState(null);
   const pollingRef = useRef(null);
 
+  const [error, setError] = useState(null);
+
   useEffect(() => {
     loadInvoice();
     return () => {
@@ -61,21 +63,13 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
   const loadInvoice = async () => {
     try {
       setLoading(true);
-      let data = null;
-
-      if (isAuthenticated) {
-        try {
-          const res = await invoicesApi.get(invoiceId);
-          data = res?.data || null;
-        } catch (err) {
-          console.warn('Could not load invoice from API, falling back to local storage:', err);
-        }
-      }
+      setError(null);
+      const res = await invoicesApi.get(invoiceId);
+      const data = res?.data || null;
 
       if (!data) {
-        data = await getInvoiceById(invoiceId);
+        setError('Invoice not found.');
       }
-
       setInvoice(data);
 
       if (data) {
@@ -146,11 +140,7 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
     const newStatus = invoice.status === 'Paid' ? 'Issued' : 'Paid';
 
     try {
-      if (isAuthenticated && invoice._id) {
-        await invoicesApi.update(targetId, { status: newStatus });
-      } else {
-        await updateInvoice(targetId, { status: newStatus });
-      }
+      await invoicesApi.update(targetId, { status: newStatus });
       setInvoice({ ...invoice, status: newStatus });
     } catch {
       alert('Failed to update status');
@@ -160,20 +150,9 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
   const handleDuplicate = async () => {
     try {
       const targetId = invoice._id || invoice.id;
-      if (isAuthenticated && invoice._id) {
-        const res = await invoicesApi.duplicate(targetId);
-        onNavigate('edit-invoice', res?.data?._id);
-      } else {
-        const settings = await getSettings();
-        const allInvoices = await getInvoices();
-        const newNum = generateNextInvoiceNumber(
-          settings.invoicePrefix,
-          settings.startingNumber,
-          allInvoices
-        );
-        const dup = await duplicateInvoice(targetId, newNum);
-        onNavigate('edit-invoice', dup.id);
-      }
+      const res = await invoicesApi.duplicate(targetId);
+      const newId = res?.data?._id || res?.data?.id;
+      onNavigate('edit-invoice', newId);
     } catch (err) {
       alert(err.message || 'Failed to duplicate invoice');
     }
@@ -183,11 +162,7 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
     if (window.confirm(`Are you sure you want to delete invoice ${invoice.invoiceNumber}?`)) {
       try {
         const targetId = invoice._id || invoice.id;
-        if (isAuthenticated && invoice._id) {
-          await invoicesApi.delete(targetId);
-        } else {
-          await deleteInvoice(targetId);
-        }
+        await invoicesApi.delete(targetId);
         onNavigate('invoices');
       } catch (err) {
         alert(err.message || 'Failed to delete invoice');

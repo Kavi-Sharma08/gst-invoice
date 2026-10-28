@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Package, Edit3, Trash2, Cloud, HardDrive, Tag, X } from 'lucide-react';
+import { Plus, Search, Package, Edit3, Trash2, Tag, X, AlertCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ProductModal } from '../components/product/ProductModal';
 import { useAuth } from '../context/AuthContext';
 import { productsApi } from '../api/products.api';
-import { getProducts, addProduct, updateProduct, deleteProduct } from '../db/products';
 import { formatCurrency } from '../utils/currency';
 import { useDebounce } from '../utils/useDebounce';
 
@@ -12,6 +11,7 @@ export function Products() {
   const { isAuthenticated } = useAuth();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -24,20 +24,13 @@ export function Products() {
   const loadProducts = async () => {
     try {
       setLoading(true);
-      if (isAuthenticated) {
-        try {
-          const res = await productsApi.list({ search: debouncedSearch, limit: 100 });
-          setProducts(Array.isArray(res?.data) ? res.data : []);
-          return;
-        } catch (apiErr) {
-          console.warn('API error, falling back to local database:', apiErr);
-        }
-      }
-
-      const list = await getProducts(debouncedSearch);
-      setProducts(Array.isArray(list) ? list : []);
+      setError(null);
+      const res = await productsApi.list({ search: debouncedSearch, limit: 100 });
+      const list = Array.isArray(res?.data) ? res.data : (res?.data?.products || []);
+      setProducts(list);
     } catch (err) {
       console.error('Failed to load products:', err);
+      setError(err.message || 'Failed to load products. Please check your connection.');
     } finally {
       setLoading(false);
     }
@@ -56,18 +49,10 @@ export function Products() {
   const handleSaveProduct = async (formData) => {
     try {
       const targetId = editingProduct?._id || editingProduct?.id;
-      if (isAuthenticated) {
-        if (editingProduct) {
-          await productsApi.update(targetId, formData);
-        } else {
-          await productsApi.create(formData);
-        }
+      if (editingProduct) {
+        await productsApi.update(targetId, formData);
       } else {
-        if (editingProduct) {
-          await updateProduct(targetId, formData);
-        } else {
-          await addProduct(formData);
-        }
+        await productsApi.create(formData);
       }
       setIsModalOpen(false);
       loadProducts();
@@ -80,11 +65,7 @@ export function Products() {
     const targetId = product._id || product.id;
     if (window.confirm(`Are you sure you want to delete "${product.name}"?`)) {
       try {
-        if (isAuthenticated && product._id) {
-          await productsApi.delete(targetId);
-        } else {
-          await deleteProduct(targetId);
-        }
+        await productsApi.delete(targetId);
         loadProducts();
       } catch (err) {
         alert(err.message || 'Failed to delete product');
@@ -115,6 +96,18 @@ export function Products() {
           Add Item / Service
         </Button>
       </div>
+
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadProducts} className="text-xs">
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* ── Search Bar ──────────────────────────────────────────────────────── */}
       <div className="relative w-full max-w-md">

@@ -8,19 +8,15 @@ import {
   Download,
   Trash2,
   FileText,
-  Cloud,
-  HardDrive,
   X,
   ArrowUpRight,
-  Filter
+  Filter,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { InvoiceStatusBadge } from '../components/ui/Badge';
 import { useAuth } from '../context/AuthContext';
 import { invoicesApi } from '../api/invoices.api';
-import { getInvoices, deleteInvoice, duplicateInvoice } from '../db/invoices';
-import { getSettings } from '../db/settings';
-import { generateNextInvoiceNumber } from '../utils/invoiceNumber';
 import { formatCurrency } from '../utils/currency';
 import { formatDate } from '../utils/date';
 import { useDebounce } from '../utils/useDebounce';
@@ -33,6 +29,7 @@ export function Invoices({ onNavigate: propOnNavigate }) {
 
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -44,26 +41,16 @@ export function Invoices({ onNavigate: propOnNavigate }) {
   const loadInvoices = async () => {
     try {
       setLoading(true);
-      if (isAuthenticated) {
-        try {
-          const params = {};
-          if (debouncedSearch) params.search = debouncedSearch;
-          if (statusFilter !== 'ALL') params.status = statusFilter;
-          const res = await invoicesApi.list(params);
-          setInvoices(Array.isArray(res?.data) ? res.data : []);
-          return;
-        } catch (apiErr) {
-          console.warn('API error, falling back to local database:', apiErr);
-        }
-      }
-
-      const list = await getInvoices({
-        search: debouncedSearch,
-        status: statusFilter
-      });
-      setInvoices(Array.isArray(list) ? list : []);
+      setError(null);
+      const params = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (statusFilter !== 'ALL') params.status = statusFilter;
+      const res = await invoicesApi.list(params);
+      const list = Array.isArray(res?.data) ? res.data : (res?.data?.invoices || []);
+      setInvoices(list);
     } catch (err) {
       console.error('Failed to load invoices:', err);
+      setError(err.message || 'Failed to load invoices. Please check your connection.');
     } finally {
       setLoading(false);
     }
@@ -82,20 +69,9 @@ export function Invoices({ onNavigate: propOnNavigate }) {
   const handleDuplicate = async (invoice) => {
     try {
       const targetId = invoice._id || invoice.id;
-      if (isAuthenticated && invoice._id) {
-        const res = await invoicesApi.duplicate(targetId);
-        onNavigate('edit-invoice', res?.data?._id);
-      } else {
-        const settings = await getSettings();
-        const allInvoices = await getInvoices();
-        const newNum = generateNextInvoiceNumber(
-          settings.invoicePrefix,
-          settings.startingNumber,
-          allInvoices
-        );
-        const dup = await duplicateInvoice(targetId, newNum);
-        onNavigate('edit-invoice', dup.id);
-      }
+      const res = await invoicesApi.duplicate(targetId);
+      const newId = res?.data?._id || res?.data?.id;
+      onNavigate('edit-invoice', newId);
     } catch (err) {
       alert(err.message || 'Failed to duplicate invoice');
     }
@@ -105,11 +81,7 @@ export function Invoices({ onNavigate: propOnNavigate }) {
     const targetId = invoice._id || invoice.id;
     if (window.confirm(`Are you sure you want to delete invoice ${invoice.invoiceNumber}? This cannot be undone.`)) {
       try {
-        if (isAuthenticated && invoice._id) {
-          await invoicesApi.delete(targetId);
-        } else {
-          await deleteInvoice(targetId);
-        }
+        await invoicesApi.delete(targetId);
         loadInvoices();
       } catch (err) {
         alert(err.message || 'Failed to delete invoice');
@@ -163,6 +135,18 @@ export function Invoices({ onNavigate: propOnNavigate }) {
           Create Invoice
         </Button>
       </div>
+
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadInvoices} className="text-xs">
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* ── Summary Strip (Glide Cards) ─────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

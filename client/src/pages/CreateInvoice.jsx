@@ -28,16 +28,11 @@ import { ProductPickerModal } from '../components/invoice/ProductPickerModal';
 import { ProductModal } from '../components/product/ProductModal';
 import { LiveInvoiceSheet } from '../components/invoice/LiveInvoiceSheet';
 
-import { getBusinessProfile } from '../db/business';
-import { getCustomers, addCustomer } from '../db/customers';
-import { addProduct } from '../db/products';
-import { getInvoices, getInvoiceById, saveInvoice, updateInvoice } from '../db/invoices';
-import { getSettings } from '../db/settings';
-
 import { useAuth } from '../context/AuthContext';
 import { invoicesApi } from '../api/invoices.api';
 import { businessApi } from '../api/business.api';
 import { customersApi } from '../api/customers.api';
+import { productsApi } from '../api/products.api';
 
 import { determineTaxType, calculateInvoiceTotal } from '../gst/calculateGST';
 import { validateInvoice } from '../gst/validateInvoice';
@@ -116,66 +111,32 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
   const loadSetupData = async () => {
     try {
       setLoading(true);
-      let biz = null;
-      let custList = [];
-      let invList = [];
-      let sets = null;
+      const [bRes, cRes, iRes] = await Promise.all([
+        businessApi.get(),
+        customersApi.list({ limit: 100 }),
+        invoicesApi.list({ limit: 100 })
+      ]);
 
-      if (isAuthenticated) {
-        try {
-          const [bRes, cRes, iRes] = await Promise.all([
-            businessApi.get(),
-            customersApi.list({ limit: 100 }),
-            invoicesApi.list({ limit: 100 })
-          ]);
-          biz = bRes?.data || null;
-          custList = Array.isArray(cRes?.data) ? cRes.data : [];
-          invList = Array.isArray(iRes?.data) ? iRes.data : [];
-          if (biz?.invoiceSettings) {
-            sets = {
-              invoicePrefix: biz.invoiceSettings.invoicePrefix || 'INV/',
-              startingNumber: biz.invoiceSettings.startingNumber || 1,
-              defaultNotes: biz.invoiceSettings.defaultNotes || '',
-              defaultTerms: biz.invoiceSettings.defaultTerms || '',
-              bankDetails: biz.bankDetails || {}
-            };
-          }
-        } catch (apiErr) {
-          console.warn('API fetch failed, falling back to local DB:', apiErr);
-        }
-      }
+      const biz = bRes?.data || null;
+      const custList = Array.isArray(cRes?.data) ? cRes.data : (cRes?.data?.customers || []);
+      const invList = Array.isArray(iRes?.data) ? iRes.data : (iRes?.data?.invoices || []);
 
-      if (!biz || !sets) {
-        const [localBiz, localCusts, localInvs, localSets] = await Promise.all([
-          getBusinessProfile(),
-          getCustomers(),
-          getInvoices(),
-          getSettings()
-        ]);
-        if (!biz) biz = localBiz;
-        if (!custList.length) custList = Array.isArray(localCusts) ? localCusts : [];
-        if (!invList.length) invList = Array.isArray(localInvs) ? localInvs : [];
-        if (!sets) sets = localSets;
-      }
+      const sets = {
+        invoicePrefix: biz?.invoiceSettings?.invoicePrefix || 'INV/',
+        startingNumber: biz?.invoiceSettings?.startingNumber || 1,
+        defaultNotes: biz?.invoiceSettings?.defaultNotes || 'Thank you for your business!',
+        defaultTerms: biz?.invoiceSettings?.defaultTerms || 'Payment due within 15 days.',
+        bankDetails: biz?.bankDetails || {}
+      };
 
       setBusiness(biz);
-      setCustomers(Array.isArray(custList) ? custList : []);
-      setExistingInvoices(Array.isArray(invList) ? invList : []);
-      setSettings(sets || {});
+      setCustomers(custList);
+      setExistingInvoices(invList);
+      setSettings(sets);
 
       if (isEditing) {
-        let inv = null;
-        if (isAuthenticated) {
-          try {
-            const res = await invoicesApi.get(invoiceId);
-            inv = res?.data || null;
-          } catch {
-            // fallback
-          }
-        }
-        if (!inv) {
-          inv = await getInvoiceById(invoiceId);
-        }
+        const res = await invoicesApi.get(invoiceId);
+        const inv = res?.data || null;
 
         if (inv) {
           setInvoiceNumber(inv.invoiceNumber || '');
@@ -188,24 +149,25 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
           setItems(inv.items?.length ? inv.items : []);
           setNotes(inv.notes || '');
           setTerms(inv.terms || '');
-          setBankDetails(inv.bankDetails || sets?.bankDetails || {});
+          setBankDetails(inv.bankDetails || sets.bankDetails || {});
         }
       } else {
-        // Generate new invoice number
+        // Generate new sequential invoice number
         const nextNum = generateNextInvoiceNumber(
-          sets?.invoicePrefix || 'INV/',
-          sets?.startingNumber || 1,
+          sets.invoicePrefix,
+          sets.startingNumber,
           invList
         );
         setInvoiceNumber(nextNum);
-        setNotes(sets?.defaultNotes || '');
-        setTerms(sets?.defaultTerms || '');
-        if (sets?.bankDetails) {
+        setNotes(sets.defaultNotes);
+        setTerms(sets.defaultTerms);
+        if (sets.bankDetails) {
           setBankDetails(sets.bankDetails);
         }
       }
     } catch (err) {
       console.error('Failed to initialize invoice editor:', err);
+      setErrorMessages([err.message || 'Failed to initialize invoice editor.']);
     } finally {
       setLoading(false);
     }
@@ -295,23 +257,13 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
 
     try {
       setSaving(true);
-      if (isAuthenticated) {
-        if (isEditing) {
-          await invoicesApi.update(invoiceId, payload);
-          onNavigate('invoice-details', invoiceId);
-        } else {
-          const res = await invoicesApi.create(payload);
-          const targetId = res?.data?._id || res?.data?.id;
-          onNavigate('invoice-details', targetId);
-        }
+      if (isEditing) {
+        await invoicesApi.update(invoiceId, payload);
+        onNavigate('invoice-details', invoiceId);
       } else {
-        if (isEditing) {
-          await updateInvoice(invoiceId, payload);
-          onNavigate('invoice-details', invoiceId);
-        } else {
-          const saved = await saveInvoice(payload);
-          onNavigate('invoice-details', saved.id);
-        }
+        const res = await invoicesApi.create(payload);
+        const targetId = res?.data?._id || res?.data?.id;
+        onNavigate('invoice-details', targetId);
       }
     } catch (err) {
       setErrorMessages([err.message || 'Failed to save invoice']);
@@ -322,29 +274,22 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
 
   const handleAddNewCustomerSaved = async (newCustomer) => {
     try {
-      let added = null;
-      if (isAuthenticated) {
-        const res = await customersApi.create(newCustomer);
-        added = res?.data;
-        const cRes = await customersApi.list({ limit: 100 });
-        setCustomers(Array.isArray(cRes?.data) ? cRes.data : (added ? [added] : []));
-      } else {
-        added = await addCustomer(newCustomer);
-        const custList = await getCustomers();
-        setCustomers(Array.isArray(custList) ? custList : []);
-      }
+      const res = await customersApi.create(newCustomer);
+      const added = res?.data;
+      const cRes = await customersApi.list({ limit: 100 });
+      setCustomers(Array.isArray(cRes?.data) ? cRes.data : (cRes?.data?.customers || (added ? [added] : [])));
 
       const custId = added?._id || added?.id;
       setSelectedCustomerId(String(custId));
       setCustomerData({
-        name: added.name || '',
-        gstin: added.gstin || '',
-        address: added.address || '',
-        state: added.state || '',
-        phone: added.phone || '',
-        email: added.email || ''
+        name: added?.name || '',
+        gstin: added?.gstin || '',
+        address: added?.address || '',
+        state: added?.state || '',
+        phone: added?.phone || '',
+        email: added?.email || ''
       });
-      if (added.state) {
+      if (added?.state) {
         setPlaceOfSupply(added.state);
       }
       setShowAddCustomerModal(false);
@@ -360,7 +305,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
       hsnSac: prod.hsnSac || '',
       quantity: 1,
       unit: prod.unit || 'Nos',
-      rate: prod.unitPrice || 0,
+      rate: prod.rate ?? prod.unitPrice ?? 0,
       discount: 0,
       gstRate: prod.gstRate ?? 18
     };
@@ -374,8 +319,17 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
 
   const handleSaveNewProduct = async (productData) => {
     try {
-      await addProduct(productData);
-      handleSelectProduct(productData);
+      const res = await productsApi.create({
+        name: productData.name,
+        type: productData.type || 'Service',
+        hsnSac: productData.hsnSac || '',
+        gstRate: productData.gstRate ?? 18,
+        rate: productData.rate ?? productData.unitPrice ?? 0,
+        unit: productData.unit || 'Nos',
+        description: productData.description || ''
+      });
+      const saved = res?.data || productData;
+      handleSelectProduct(saved);
       setShowCreateProductModal(false);
     } catch (err) {
       alert(err.message || 'Failed to save product');
@@ -696,7 +650,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                   Live Invoice Preview
                 </span>
                 <span className="text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-medium border border-emerald-200/70">
-                  Real-time Sync
+                  Auto-Calculated
                 </span>
               </div>
 
