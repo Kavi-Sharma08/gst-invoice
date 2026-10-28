@@ -67,10 +67,10 @@ export function MigrationBanner({ onMigrationSuccess }) {
   };
 
   return (
-    <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200 px-4 py-3 text-slate-800 transition-all no-print">
+    <div className="bg-amber-50/80 border-b border-amber-200/80 px-4 py-3 text-slate-800 transition-all no-print">
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
-        <div className="flex items-start gap-2.5">
-          <div className="p-1.5 bg-amber-100 rounded-lg text-amber-800 shrink-0 mt-0.5 md:mt-0">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-amber-100 rounded-xl text-amber-900 shrink-0 mt-0.5 md:mt-0 shadow-2xs">
             <CloudUpload className="w-4 h-4" />
           </div>
           <div>

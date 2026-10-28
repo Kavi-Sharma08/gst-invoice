@@ -146,7 +146,7 @@ export function ProductModal({ isOpen, onClose, onSave, initialData = null }) {
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             placeholder="Scope of work or item specifications"
-            className="w-full text-sm rounded-md border border-slate-300 p-2.5 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:border-slate-800 focus:ring-slate-800"
+            className="w-full text-xs sm:text-sm rounded-xl border border-slate-200/90 p-3 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-900 focus:ring-3 focus:ring-slate-900/5 shadow-2xs"
           />
         </div>
 

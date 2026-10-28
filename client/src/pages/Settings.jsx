@@ -244,30 +244,39 @@ export function Settings() {
   }
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto pb-12">
+    <div className="space-y-8 max-w-4xl mx-auto pb-16 animate-fade-in">
       {/* Header */}
-      <div className="pb-3 border-b border-slate-200">
-        <h1 className="text-xl font-bold tracking-tight text-slate-900">Settings & Profile</h1>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Configure business details, invoice series numbering, and local database backups
+      <div className="pb-3 border-b border-slate-200/80">
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 font-heading">
+          Settings & Configuration
+        </h1>
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          Configure business profile details, GST invoice series numbering, and local/cloud backups
         </p>
       </div>
 
       {/* Privacy Notice Pill */}
-      <div className="bg-slate-100 border border-slate-200 rounded-lg p-3 flex items-center justify-between text-xs text-slate-700">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>
-            <strong>Local-First Guarantee:</strong> All profile data, customers, and invoices remain on this machine inside your browser's IndexedDB storage.
-          </span>
+      <div className="glide-card p-4 flex items-center justify-between text-xs text-slate-700 bg-white">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="font-bold text-slate-900">Privacy & Data Security: </span>
+            <span className="text-slate-600">
+              {isAuthenticated
+                ? 'Your business profile and settings are encrypted and securely synchronized with your MongoDB cloud database.'
+                : 'All profile data, customers, and invoices remain on this device inside your browser’s IndexedDB storage.'}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* 1. Business Profile Section */}
-      <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs space-y-4">
-        <div className="pb-2 border-b border-slate-100">
-          <h2 className="text-sm font-semibold text-slate-900">Business Profile (Seller)</h2>
-          <p className="text-xs text-slate-500">This information appears at the top of your issued tax invoices.</p>
+      <div className="glide-card p-6 space-y-5">
+        <div className="pb-3 border-b border-slate-100">
+          <h2 className="text-base font-bold text-slate-900 font-heading">Business Profile (Supplier)</h2>
+          <p className="text-xs text-slate-500 mt-0.5">This information appears at the top of all issued GST tax invoices.</p>
         </div>
 
         {bizMessage && (
@@ -360,7 +369,7 @@ export function Settings() {
       </div>
 
       {/* 2. Invoice Numbering & Defaults */}
-      <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs space-y-4">
+      <div className="glide-card p-6 space-y-5">
         <div className="pb-2 border-b border-slate-100">
           <h2 className="text-sm font-semibold text-slate-900">Invoice Series & Numbering</h2>
           <p className="text-xs text-slate-500">Configure how new invoice numbers are generated sequentially.</p>
@@ -486,7 +495,7 @@ export function Settings() {
       </div>
 
       {/* 3. Backup & Restore Section */}
-      <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs space-y-4">
+      <div className="glide-card p-6 space-y-5">
         <div className="pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4 text-slate-700" />

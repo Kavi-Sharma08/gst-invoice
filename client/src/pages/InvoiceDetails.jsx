@@ -270,9 +270,9 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
   const posObj = getStateByName(posState) || getStateByCode(posState);
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Top Bar Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-slate-200 no-print">
+    <div className="space-y-6 max-w-4xl mx-auto animate-fade-in pb-16">
+      {/* Top Bar Actions — Glide Document Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-slate-200/80 no-print">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -284,7 +284,7 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
             All Invoices
           </Button>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 font-mono">
+            <h1 className="text-xl font-extrabold tracking-tight text-slate-900 font-heading">
               {invoice.invoiceNumber}
             </h1>
             <InvoiceStatusBadge status={invoice.status} />
@@ -297,9 +297,9 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
             variant="outline"
             size="sm"
             onClick={() => setIsEmailModalOpen(true)}
-            className="text-xs bg-slate-900 text-white hover:bg-slate-800 border-slate-900"
+            className="text-xs"
           >
-            <Mail className="w-3.5 h-3.5 mr-1" />
+            <Mail className="w-3.5 h-3.5 mr-1 text-indigo-600" />
             Send Email
           </Button>
 
@@ -309,9 +309,10 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
             onClick={handleStatusToggle}
             className="text-xs"
           >
-            <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-slate-600" />
-            {invoice.status === 'Paid' ? 'Mark as Unpaid' : 'Mark as Paid'}
+            <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+            {invoice.status === 'Paid' ? 'Mark Unpaid' : 'Mark Paid'}
           </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -321,6 +322,7 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
             <Edit3 className="w-3.5 h-3.5 mr-1" />
             Edit
           </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -330,6 +332,7 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
             <Copy className="w-3.5 h-3.5 mr-1" />
             Duplicate
           </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -339,19 +342,22 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
             <Printer className="w-3.5 h-3.5 mr-1" />
             Print
           </Button>
+
           <Button
             size="sm"
             onClick={handleDownloadPDF}
-            className="text-xs"
+            className="text-xs shadow-xs"
           >
             <Download className="w-3.5 h-3.5 mr-1" />
             Download PDF
           </Button>
+
           <Button
             variant="ghost"
             size="sm"
             onClick={handleDelete}
             className="text-xs text-rose-600 hover:bg-rose-50"
+            title="Delete Invoice"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
@@ -411,16 +417,23 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
         </div>
       )}
 
-      {/* Embedded Invoice Sheet */}
-      <div className="bg-white p-6 sm:p-10 shadow-xs border border-slate-200 rounded-lg text-slate-900 text-xs print-page">
+      {/* Embedded Invoice Sheet — Glide Paper Canvas */}
+      <div className="bg-white p-6 sm:p-10 shadow-sm border border-slate-200/90 rounded-2xl text-slate-900 text-xs print-page">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-slate-300 pb-4">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 uppercase">Tax Invoice</h1>
-            <p className="text-[11px] text-slate-500 mt-0.5">Issued under Section 31 of CGST Act, 2017</p>
+        <div className="flex items-start justify-between border-b border-slate-200 pb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-sm">
+              ₹
+            </div>
+            <div>
+              <h2 className="text-xl font-extrabold tracking-tight text-slate-900 uppercase font-heading">
+                Tax Invoice
+              </h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">Issued under Section 31 of CGST Act, 2017</p>
+            </div>
           </div>
           <div className="text-right">
-            <span className="inline-block text-[11px] font-semibold text-slate-600 border border-slate-300 px-2.5 py-0.5 rounded bg-slate-50">
+            <span className="inline-block text-[11px] font-semibold text-slate-700 border border-slate-200 px-3 py-1 rounded-full bg-slate-50">
               Original for Recipient
             </span>
           </div>

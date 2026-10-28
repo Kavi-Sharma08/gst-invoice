@@ -31,13 +31,13 @@ export function InvoicePreviewModal({ isOpen, onClose, invoice }) {
   const posObj = getStateByName(posState) || getStateByCode(posState);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-      <div className="relative w-full max-w-4xl bg-slate-100 rounded-xl shadow-2xl border border-slate-300 my-auto flex flex-col max-h-[96vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/50 backdrop-blur-xs overflow-y-auto animate-fade-in">
+      <div className="relative w-full max-w-4xl bg-slate-50 rounded-2xl shadow-2xl border border-slate-200/90 my-auto flex flex-col max-h-[96vh] overflow-hidden">
         {/* Modal Top Actions */}
-        <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-200 rounded-t-xl no-print">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm text-slate-800">Invoice Preview</span>
-            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">
+        <div className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-slate-200/80 rounded-t-2xl no-print">
+          <div className="flex items-center gap-2.5">
+            <span className="font-bold text-sm text-slate-900 font-heading">Tax Invoice Preview</span>
+            <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full font-mono font-medium border border-slate-200/70">
               {invoice.invoiceNumber || 'DRAFT'}
             </span>
           </div>
@@ -46,13 +46,13 @@ export function InvoicePreviewModal({ isOpen, onClose, invoice }) {
               <Printer className="w-3.5 h-3.5 mr-1" />
               Print
             </Button>
-            <Button size="sm" onClick={handleDownload} className="text-xs">
+            <Button size="sm" onClick={handleDownload} className="text-xs shadow-xs">
               <Download className="w-3.5 h-3.5 mr-1" />
               Download PDF
             </Button>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors ml-1 cursor-pointer"
+              className="p-1.5 rounded-full text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors ml-1 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
