@@ -106,7 +106,7 @@ export function InvoiceItemsTable({
             onClick={onOpenProductPicker}
             className="text-xs text-slate-700 self-start sm:self-auto shadow-2xs"
           >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-600 mr-1" />
+            <Sparkles className="w-3.5 h-3.5 text-[var(--accent)] mr-1" />
             Pick from Product Catalog
           </Button>
         )}

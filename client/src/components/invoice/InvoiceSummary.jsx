@@ -48,7 +48,7 @@ export function InvoiceSummary({ summary }) {
         ) : (
           <div className="flex justify-between text-slate-600">
             <span>Integrated GST (IGST)</span>
-            <span className="font-mono text-indigo-700 font-medium tabular-nums">{formatCurrency(igst)}</span>
+            <span className="font-mono text-[var(--accent-text)] font-medium tabular-nums">{formatCurrency(igst)}</span>
           </div>
         )}
 

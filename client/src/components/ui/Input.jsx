@@ -24,14 +24,14 @@ export function Input({
   return (
     <div className={`w-full ${className}`}>
       {label && (
-        <label htmlFor={inputId} className="block text-xs font-semibold text-slate-700 mb-1.5 tracking-tight">
+        <label htmlFor={inputId} className="block text-xs font-semibold text-[var(--foreground)] mb-1.5 tracking-tight">
           {label}
-          {required && <span className="text-rose-500 ml-1 font-bold">*</span>}
+          {required && <span className="text-[var(--danger)] ml-1 font-semibold">*</span>}
         </label>
       )}
       <div className="relative flex items-center">
         {prefix && (
-          <span className="absolute left-3.5 text-xs font-medium text-slate-400 select-none pointer-events-none">
+          <span className="absolute left-3.5 text-xs font-medium text-[var(--muted)] select-none pointer-events-none">
             {prefix}
           </span>
         )}
@@ -43,23 +43,23 @@ export function Input({
           placeholder={placeholder}
           disabled={disabled}
           required={required}
-          className={`w-full text-xs sm:text-sm rounded-xl border bg-white px-3.5 py-2.5 text-slate-900 transition-all placeholder:text-slate-400 focus:outline-none ${
+          className={`w-full text-xs sm:text-sm rounded-xl border bg-[var(--surface)] px-3.5 py-2.5 text-[var(--foreground)] transition-all placeholder:text-[var(--muted)] focus:outline-none ${
             prefix ? 'pl-8' : ''
           } ${suffix ? 'pr-9' : ''} ${
             error
-              ? 'border-rose-300 focus:border-rose-500 focus:ring-3 focus:ring-rose-500/10'
-              : 'border-slate-200/90 hover:border-slate-300 focus:border-slate-900 focus:ring-3 focus:ring-slate-900/5'
-          } ${disabled ? 'bg-slate-50/80 text-slate-400 cursor-not-allowed' : 'shadow-2xs'}`}
+              ? 'border-[var(--danger)] focus:border-[var(--danger)] focus:ring-2 focus:ring-[var(--danger)]/20'
+              : 'border-[var(--border)] hover:border-[var(--ring-muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20'
+          } ${disabled ? 'opacity-50 text-[var(--muted)] cursor-not-allowed' : ''}`}
           {...props}
         />
         {suffix && (
-          <span className="absolute right-3.5 text-xs font-medium text-slate-400 select-none pointer-events-none">
+          <span className="absolute right-3.5 text-xs font-medium text-[var(--muted)] select-none pointer-events-none">
             {suffix}
           </span>
         )}
       </div>
-      {error && <p className="mt-1 text-[11px] font-medium text-rose-600">{error}</p>}
-      {!error && helperText && <p className="mt-1 text-[11px] text-slate-400">{helperText}</p>}
+      {error && <p className="mt-1 text-[11px] font-medium text-[var(--danger)]">{error}</p>}
+      {!error && helperText && <p className="mt-1 text-[11px] text-[var(--muted)]">{helperText}</p>}
     </div>
   );
 }

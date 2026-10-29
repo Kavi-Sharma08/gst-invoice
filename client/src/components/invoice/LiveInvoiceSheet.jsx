@@ -116,7 +116,7 @@ export function LiveInvoiceSheet({
         </div>
         <div>
           <span className="text-slate-400 block text-[10px]">Tax Type:</span>
-          <span className="font-semibold text-indigo-700">
+          <span className="font-semibold text-[var(--accent-text)]">
             {isInterState ? 'Inter-State (IGST)' : 'Intra-State (CGST + SGST)'}
           </span>
         </div>
@@ -219,7 +219,7 @@ export function LiveInvoiceSheet({
           ) : (
             <div className="flex justify-between">
               <span>IGST</span>
-              <span className="font-mono text-indigo-700 font-medium tabular-nums">
+              <span className="font-mono text-[var(--accent-text)] font-medium tabular-nums">
                 {formatCurrency(calculation.igst || 0)}
               </span>
             </div>

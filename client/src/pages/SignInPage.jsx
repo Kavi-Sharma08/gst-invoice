@@ -24,13 +24,13 @@ export function SignInPage() {
   }
 
   return (
-    <div className="min-h-[75vh] flex flex-col items-center justify-center py-10 px-4">
+    <div className="min-h-[75vh] flex flex-col items-center justify-center py-10 px-4 bg-[var(--background)]">
       <div className="text-center mb-6">
-        <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-slate-900 text-white font-bold text-lg mb-2 shadow-sm">
+        <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-[var(--surface)] text-[var(--foreground)] border border-[var(--border)] font-semibold text-lg mb-2 shadow-sm">
           ₹
         </div>
-        <h1 className="text-xl font-bold tracking-tight text-slate-900">Sign in to BillGST</h1>
-        <p className="text-xs text-slate-500 mt-1">Access your invoices and business records</p>
+        <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">Sign in to BillGST</h1>
+        <p className="text-xs text-[var(--muted)] mt-1">Access your invoices and business records</p>
       </div>
 
       <SignIn
@@ -41,13 +41,15 @@ export function SignInPage() {
         fallbackRedirectUrl="/app/dashboard"
         appearance={{
           variables: {
-            colorPrimary: '#0f172a',
-            colorText: '#1e293b',
-            colorBackground: '#ffffff',
+            colorPrimary: '#4F46E5',
+            colorText: '#FAFAFA',
+            colorBackground: '#111113',
+            colorInputBackground: '#09090B',
+            colorInputText: '#FAFAFA',
             borderRadius: '0.75rem'
           },
           elements: {
-            card: 'shadow-sm border border-slate-200/90'
+            card: 'shadow-sm border border-[#27272A] bg-[#111113]'
           }
         }}
       />

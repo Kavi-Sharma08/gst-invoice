@@ -13,14 +13,14 @@ export function Button({
   onClick,
   ...props
 }) {
-  const base = 'inline-flex items-center justify-center font-medium rounded-full transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-slate-400/50 focus:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none cursor-pointer active:scale-[0.98] select-none';
+  const base = 'inline-flex items-center justify-center font-medium rounded-full transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 focus:ring-offset-[var(--background)] disabled:opacity-50 disabled:pointer-events-none cursor-pointer active:scale-[0.98] select-none';
 
   const variants = {
-    primary: 'bg-[#0B0C0E] text-white hover:bg-[#202328] active:bg-[#000000] border border-black/10 shadow-xs',
-    secondary: 'bg-slate-100 text-slate-900 hover:bg-slate-200/80 border border-slate-200/60',
-    outline: 'bg-white text-slate-800 hover:bg-slate-50/90 border border-slate-200/90 shadow-2xs hover:border-slate-300',
-    ghost: 'bg-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/80',
-    danger: 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/80 active:bg-rose-200'
+    primary: 'bg-[var(--accent)] text-white hover:opacity-90 active:scale-[0.98] border border-transparent shadow-xs',
+    secondary: 'bg-[var(--foreground)] text-[#18181B] hover:opacity-90 border border-transparent font-medium',
+    outline: 'bg-transparent text-[var(--foreground)] hover:bg-[var(--surface-hover)] border border-[var(--border)] shadow-2xs',
+    ghost: 'bg-transparent text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)]',
+    danger: 'bg-rose-500/15 text-[var(--danger)] hover:bg-rose-500/25 border border-rose-500/30'
   };
 
   const sizes = {

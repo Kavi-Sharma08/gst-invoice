@@ -5,23 +5,25 @@ import React from 'react';
  */
 export function Badge({ children, variant = 'default', size = 'sm', className = '', withDot = false }) {
   const variants = {
-    default: 'bg-slate-100/90 text-slate-700 border-slate-200/80',
-    success: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
-    warning: 'bg-amber-50 text-amber-800 border-amber-200/80',
-    info: 'bg-sky-50 text-sky-700 border-sky-200/80',
-    purple: 'bg-indigo-50 text-indigo-700 border-indigo-200/80',
-    neutral: 'bg-slate-100 text-slate-600 border-slate-200',
-    danger: 'bg-rose-50 text-rose-700 border-rose-200/80'
+    default: 'bg-[var(--surface-hover)] text-[var(--foreground)] border-[var(--border)]',
+    success: 'bg-emerald-500/15 text-[var(--success)] border-emerald-500/30',
+    warning: 'bg-amber-500/15 text-[var(--warning)] border-amber-500/30',
+    info: 'bg-sky-500/15 text-sky-400 border-sky-500/30',
+    accent: 'bg-[var(--accent-soft-bg)] text-[var(--accent-soft-text)] border-[var(--accent)]/30',
+    purple: 'bg-[var(--accent-soft-bg)] text-[var(--accent-soft-text)] border-[var(--accent)]/30',
+    neutral: 'bg-[var(--surface-hover)] text-[var(--muted)] border-[var(--border)]',
+    danger: 'bg-rose-500/15 text-[var(--danger)] border-rose-500/30'
   };
 
   const dots = {
-    default: 'bg-slate-400',
-    success: 'bg-emerald-500 animate-pulse',
-    warning: 'bg-amber-500',
-    info: 'bg-sky-500',
-    purple: 'bg-indigo-500',
-    neutral: 'bg-slate-400',
-    danger: 'bg-rose-500'
+    default: 'bg-[var(--muted)]',
+    success: 'bg-[var(--success)] animate-pulse',
+    warning: 'bg-[var(--warning)]',
+    info: 'bg-sky-400',
+    accent: 'bg-[var(--accent)]',
+    purple: 'bg-[var(--accent)]',
+    neutral: 'bg-[var(--muted)]',
+    danger: 'bg-[var(--danger)]'
   };
 
   const sizes = {

@@ -274,7 +274,7 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
             onClick={() => setIsEmailModalOpen(true)}
             className="text-xs"
           >
-            <Mail className="w-3.5 h-3.5 mr-1 text-indigo-600" />
+            <Mail className="w-3.5 h-3.5 mr-1 text-[var(--accent)]" />
             Send Email
           </Button>
 

@@ -1,50 +1,137 @@
 @import "tailwindcss";
 
-@layer base {
-  :root {
-    --font-heading: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  }
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
 
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-recessed: var(--surface-recessed);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-ring-muted: var(--ring-muted);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft-bg: var(--accent-soft-bg);
+  --color-accent-soft-text: var(--accent-soft-text);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+}
+
+:root {
+  /* Dark color tokens as specified */
+  --background:        #09090B;
+  --surface:           #111113;
+  --surface-recessed:  #0C0C0E;
+  --surface-hover:     #1F1F23;
+  --surface-active:    #27272A;
+  --border:            #27272A;
+  --border-subtle:     #1F1F23;
+  --foreground:        #FAFAFA;
+  --muted:             #A1A1AA;
+  --ring-muted:        #3F3F46;
+  --accent:            #4F46E5;
+  --accent-text:       #818CF8;
+  --accent-soft-bg:    #1E1B4B;
+  --accent-soft-text:  #A5B4FC;
+  --success:           #4ADE80;
+  --warning:           #FBBF24;
+  --danger:            #F87171;
+
+  /* Aliases for backwards compatibility */
+  --bg: var(--background);
+  --ink: var(--foreground);
+  --mute: var(--muted);
+  --line: var(--border);
+  --brand: var(--accent);
+  --brand2: var(--accent-text);
+  --soft: var(--accent-soft-bg);
+  --ok: var(--success);
+  --warn: var(--warning);
+  --warnt: var(--warning);
+  --badt: var(--danger);
+  --hdr: rgba(9, 9, 11, 0.88);
+
+  color-scheme: dark;
+}
+
+@layer base {
   html {
-    font-family: var(--font-body);
-    color: #0B0C0E;
-    background-color: #F8F9FB;
+    font-family: var(--font-sans);
+    color: var(--foreground);
+    background-color: var(--background);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     letter-spacing: -0.011em;
+    color-scheme: dark;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    color: var(--foreground);
+    background-color: var(--background);
+    min-height: 100vh;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-heading);
+    font-family: var(--font-sans);
+    font-weight: 600;
     letter-spacing: -0.025em;
+    color: var(--foreground);
+  }
+
+  /* Strict rule: Headings use weight 600 and body text 400. Do not use weight 700 or higher anywhere */
+  b, strong, .font-bold, .font-extrabold, .font-black {
+    font-weight: 600;
   }
 
   input, select, textarea, button {
     font-family: inherit;
   }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--surface-active);
+    color: var(--foreground);
+  }
 }
 
-/* Glide Visual Design Utilities */
+/* Tabular nums for numbers and financial data */
+.num, .tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Glide Visual Design Utilities adapted to dark tokens */
 .glide-card {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 1rem;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glide-card-hover {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 1rem;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glide-card-hover:hover {
-  border-color: rgba(203, 213, 225, 0.9);
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+  border-color: var(--ring-muted);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
   transform: translateY(-1px);
 }
 
@@ -59,14 +146,14 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--background);
 }
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
+  background: var(--border);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
+  background: var(--ring-muted);
 }
 
 /* Custom print media styles for invoice printing */

@@ -292,8 +292,8 @@ export function Invoices({ onNavigate: propOnNavigate }) {
                       <td className="py-3.5 px-4">
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                           inv.taxType === 'INTER'
-                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
-                            : 'bg-slate-100 text-slate-700 border border-slate-200/60'
+                            ? 'bg-[var(--accent-soft-bg)] text-[var(--accent-soft-text)] border border-[var(--accent)]/30'
+                            : 'bg-[var(--surface-hover)] text-[var(--muted)] border border-[var(--border)]'
                         }`}>
                           {taxType}
                         </span>

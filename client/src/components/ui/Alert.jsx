@@ -4,20 +4,20 @@ import { AlertCircle, CheckCircle2, Info, AlertTriangle } from 'lucide-react';
 export function Alert({ variant = 'info', title, children, className = '' }) {
   const configs = {
     info: {
-      bg: 'bg-blue-50 border-blue-200 text-blue-900',
-      icon: <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+      bg: 'bg-sky-500/10 border-sky-500/30 text-sky-200',
+      icon: <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
     },
     success: {
-      bg: 'bg-emerald-50 border-emerald-200 text-emerald-900',
-      icon: <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+      bg: 'bg-emerald-500/10 border-emerald-500/30 text-[var(--success)]',
+      icon: <CheckCircle2 className="w-4 h-4 text-[var(--success)] shrink-0 mt-0.5" />
     },
     warning: {
-      bg: 'bg-amber-50 border-amber-200 text-amber-900',
-      icon: <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+      bg: 'bg-amber-500/10 border-amber-500/30 text-[var(--warning)]',
+      icon: <AlertTriangle className="w-4 h-4 text-[var(--warning)] shrink-0 mt-0.5" />
     },
     error: {
-      bg: 'bg-rose-50 border-rose-200 text-rose-900',
-      icon: <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+      bg: 'bg-rose-500/10 border-rose-500/30 text-[var(--danger)]',
+      icon: <AlertCircle className="w-4 h-4 text-[var(--danger)] shrink-0 mt-0.5" />
     }
   };
 
@@ -33,3 +33,5 @@ export function Alert({ variant = 'info', title, children, className = '' }) {
     </div>
   );
 }
+
+export default Alert;

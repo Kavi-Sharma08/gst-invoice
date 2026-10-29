@@ -8,8 +8,8 @@ import { addRipple } from './ripple';
 export function ShimmerButton({
   children,
   className = '',
-  shimmerColor = 'rgba(255,255,255,0.45)',
-  background = 'var(--color-ink)',
+  shimmerColor = 'rgba(255,255,255,0.3)',
+  background = 'var(--accent, #4F46E5)',
   borderRadius = '999px',
   onClick,
   href,
@@ -32,7 +32,7 @@ export function ShimmerButton({
     gap: '8px',
     border: '1px solid transparent',
     cursor: 'pointer',
-    fontWeight: 700,
+    fontWeight: 600,
     transition: 'transform 0.2s',
     '--shimmer-color': shimmerColor,
   };

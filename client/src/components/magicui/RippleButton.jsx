@@ -27,7 +27,7 @@ export function RippleButton({
     <Tag
       ref={ref}
       href={href}
-      className={`ripple-btn relative overflow-hidden inline-flex items-center gap-2 rounded-full font-bold cursor-pointer transition-transform duration-200 hover:-translate-y-0.5 ${className}`}
+      className={`ripple-btn relative overflow-hidden inline-flex items-center gap-2 rounded-full font-semibold cursor-pointer transition-transform duration-200 hover:-translate-y-0.5 ${className}`}
       onClick={handleClick}
       {...props}
     >
