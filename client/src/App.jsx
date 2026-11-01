@@ -35,9 +35,9 @@ function LegacyInvoiceEditRedirect() {
 /** Shell that wraps all authenticated /app/* workspace routes with Aceternity UI Sidebar */
 function AppShell() {
   return (
-    <div className="dashboard-app">
+    <div className="flex flex-col md:flex-row min-h-dvh w-full bg-bg text-text">
       <AceternitySidebar />
-      <div className="flex-1 w-full min-w-0 overflow-y-auto">
+      <main className="flex-1 min-w-0 overflow-x-hidden @container">
         <Suspense fallback={<LoadingFallback message="Loading workspace..." />}>
           <Routes>
             <Route index element={<Dashboard />} />
@@ -53,7 +53,7 @@ function AppShell() {
             <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
           </Routes>
         </Suspense>
-      </div>
+      </main>
     </div>
   );
 }

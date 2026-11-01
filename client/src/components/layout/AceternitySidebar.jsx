@@ -1,84 +1,330 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
+import {
+  LayoutDashboard,
+  FileText,
+  Users,
+  Package,
+  BarChart2,
+  Settings,
+  Menu,
+  X,
+  ChevronLeft,
+  ChevronRight
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-/**
- * Aceternity UI Sidebar:
- * - Collapsed icon strip (76px) that expands on hover (260px)
- * - The expanded sidebar overlays content instead of pushing it
- * - Full-screen slide-in menu on mobile screens (< 860px)
- * - Links: Dashboard, Invoices, Customers, Products & services, Reports, Settings
- */
+const NAV_LINKS = [
+  { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/app/invoices', label: 'Invoices', icon: FileText },
+  { to: '/app/customers', label: 'Customers', icon: Users },
+  { to: '/app/products', label: 'Products & services', icon: Package },
+  { to: '/app/reports', label: 'Reports', icon: BarChart2 },
+  { to: '/app/settings', label: 'Settings', icon: Settings }
+];
+
 export function AceternitySidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const location = useLocation();
   const { user } = useAuth();
 
-  const navLinks = [
-    { to: '/app/dashboard', label: 'Dashboard', icon: '📊' },
-    { to: '/app/invoices', label: 'Invoices', icon: '🧾' },
-    { to: '/app/customers', label: 'Customers', icon: '👥' },
-    { to: '/app/products', label: 'Products & services', icon: '📦' },
-    { to: '/app/reports', label: 'Reports', icon: '📈' },
-    { to: '/app/settings', label: 'Settings', icon: '⚙️' }
-  ];
+  // Close drawer on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
 
-  const handleLinkClick = () => {
-    if (mobileOpen) {
-      setMobileOpen(false);
+  // Handle ESC key to close mobile drawer
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setMobileOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mobileOpen]);
+
+  // Lock body scroll while mobile drawer is open
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [mobileOpen]);
+
+  const isLinkActive = (to) => {
+    if (to === '/app/dashboard') {
+      return (
+        location.pathname === '/app/dashboard' ||
+        location.pathname === '/app' ||
+        location.pathname === '/app/'
+      );
     }
+    return location.pathname.startsWith(to);
   };
 
   return (
-    <aside className={`side ${mobileOpen ? 'open' : ''}`} id="side">
-      <Link to="/app/dashboard" className="logo" onClick={handleLinkClick}>
-        <i>₹</i>
-        <span>BillGST</span>
-        <em>v2.0</em>
-      </Link>
+    <>
+      {/* ── 1. MOBILE TOP BAR (< md): full width, h-14, sticky top-0 ── */}
+      <div className="md:hidden sticky top-0 z-40 w-full h-14 bg-surface border-b border-border px-4 flex items-center justify-between shrink-0">
+        <Link
+          to="/app/dashboard"
+          className="flex items-center gap-2.5 font-semibold text-text text-base"
+        >
+          <i className="w-8 h-8 rounded-lg bg-surface border border-border flex items-center justify-center not-italic font-bold text-text">
+            ₹
+          </i>
+          <span>BillGST</span>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-border text-muted">
+            v2.0
+          </span>
+        </Link>
 
-      <button
-        className="burger"
-        id="burger"
-        aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
-        aria-expanded={mobileOpen}
-        onClick={() => setMobileOpen(!mobileOpen)}
+        <button
+          type="button"
+          className="p-2 -mr-2 rounded-lg text-text hover:bg-border/60 transition-colors cursor-pointer"
+          aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          aria-expanded={mobileOpen}
+          onClick={() => setMobileOpen(!mobileOpen)}
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* ── 2. MOBILE OFF-CANVAS DRAWER (< md): fixed w-72, backdrop bg-black/50 ── */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 transition-opacity md:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation drawer"
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-surface border-r border-border flex flex-col p-4 shadow-2xl transition-transform duration-300 ease-in-out md:hidden ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
       >
-        {mobileOpen ? '✕' : '☰'}
-      </button>
-
-      <nav aria-label="Main sidebar navigation">
-        {navLinks.map((item) => {
-          const isDashboardActive =
-            item.to === '/app/dashboard' &&
-            (location.pathname === '/app/dashboard' || location.pathname === '/app' || location.pathname === '/app/');
-
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              onClick={handleLinkClick}
-              className={({ isActive }) => (isActive || isDashboardActive ? 'on' : '')}
-            >
-              <b>{item.icon}</b>
-              <span>{item.label}</span>
-            </NavLink>
-          );
-        })}
-      </nav>
-
-      <div className="bot">
-        {user && (
-          <div className="pt-2 px-2 flex items-center gap-2.5 overflow-hidden">
-            <UserButton afterSignOutUrl="/" />
-            <span className="text-xs truncate font-medium text-[var(--muted)]">
-              {user.name || user.email}
+        <div className="flex items-center justify-between pb-4 border-b border-border">
+          <Link
+            to="/app/dashboard"
+            className="flex items-center gap-2.5 font-semibold text-text text-base"
+            onClick={() => setMobileOpen(false)}
+          >
+            <i className="w-8 h-8 rounded-lg bg-surface border border-border flex items-center justify-center not-italic font-bold text-text">
+              ₹
+            </i>
+            <span>BillGST</span>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-border text-muted">
+              v2.0
             </span>
+          </Link>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="p-1.5 rounded-lg text-muted hover:text-text hover:bg-border/60 transition-colors cursor-pointer"
+            aria-label="Close navigation menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <nav className="flex-1 py-4 space-y-1 overflow-y-auto">
+          {NAV_LINKS.map((item) => {
+            const active = isLinkActive(item.to);
+            const Icon = item.icon;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  active
+                    ? 'bg-border text-text font-semibold'
+                    : 'text-muted hover:text-text hover:bg-border/40'
+                }`}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span>{item.label}</span>
+              </NavLink>
+            );
+          })}
+        </nav>
+
+        <div className="pt-3 border-t border-border">
+          {user && (
+            <div className="flex items-center gap-2.5 px-2 py-1">
+              <UserButton afterSignOutUrl="/" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-text truncate">{user.name || 'Account'}</p>
+                <p className="text-[11px] text-muted truncate">{user.email}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* ── 3. TABLET (md to lg, 768px-1023px): w-16 icon rail in flow; expanding overlays content ── */}
+      <div className="hidden md:block lg:hidden w-16 shrink-0 relative z-30">
+        <aside
+          className="w-16 hover:w-60 focus-within:w-60 absolute inset-y-0 left-0 h-dvh bg-surface border-r border-border transition-[width] duration-300 ease-in-out flex flex-col p-3 overflow-hidden hover:shadow-2xl focus-within:shadow-2xl group"
+        >
+          {/* Logo */}
+          <Link
+            to="/app/dashboard"
+            className="flex items-center gap-3 font-semibold text-text h-10 px-1 overflow-hidden shrink-0"
+          >
+            <i className="w-9 h-9 rounded-lg bg-surface border border-border flex items-center justify-center not-italic font-bold text-text shrink-0">
+              ₹
+            </i>
+            <span className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 whitespace-nowrap text-base">
+              BillGST <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-border text-muted">v2.0</span>
+            </span>
+          </Link>
+
+          {/* Nav links */}
+          <nav className="flex-1 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
+            {NAV_LINKS.map((item) => {
+              const active = isLinkActive(item.to);
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  title={item.label}
+                  className={`flex items-center h-10 px-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-border text-text font-semibold'
+                      : 'text-muted hover:text-text hover:bg-border/40'
+                  }`}
+                >
+                  <span className="w-5 flex items-center justify-center shrink-0">
+                    <Icon className="w-4 h-4" />
+                  </span>
+                  <span className="ml-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 whitespace-nowrap">
+                    {item.label}
+                  </span>
+                </NavLink>
+              );
+            })}
+          </nav>
+
+          {/* Bottom user */}
+          <div className="pt-3 border-t border-border overflow-hidden shrink-0">
+            {user && (
+              <div className="flex items-center gap-2.5 px-1 py-1">
+                <UserButton afterSignOutUrl="/" />
+                <span className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 text-xs font-medium text-muted truncate whitespace-nowrap">
+                  {user.name || user.email}
+                </span>
+              </div>
+            )}
+          </div>
+        </aside>
+      </div>
+
+      {/* ── 4. DESKTOP (lg and up, >= 1024px): w-60 in flow, collapsible to w-16, resizes smoothly ── */}
+      <aside
+        className={`hidden lg:flex flex-col shrink-0 h-dvh sticky top-0 bg-surface border-r border-border transition-[width] duration-300 ease-in-out overflow-hidden p-3 z-20 ${
+          isCollapsed ? 'w-16' : 'w-60'
+        }`}
+      >
+        {/* Header with Logo + Collapse button */}
+        <div className="flex items-center justify-between h-10 px-1 overflow-hidden shrink-0">
+          <Link
+            to="/app/dashboard"
+            className="flex items-center gap-3 font-semibold text-text min-w-0"
+          >
+            <i className="w-9 h-9 rounded-lg bg-surface border border-border flex items-center justify-center not-italic font-bold text-text shrink-0">
+              ₹
+            </i>
+            {!isCollapsed && (
+              <span className="whitespace-nowrap text-base truncate">
+                BillGST <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-border text-muted">v2.0</span>
+              </span>
+            )}
+          </Link>
+          {!isCollapsed && (
+            <button
+              type="button"
+              onClick={() => setIsCollapsed(true)}
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+              className="p-1 rounded-md text-muted hover:text-text hover:bg-border/60 transition-colors cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* When collapsed on lg, show centered expand button */}
+        {isCollapsed && (
+          <div className="flex justify-center pt-2">
+            <button
+              type="button"
+              onClick={() => setIsCollapsed(false)}
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
+              className="p-1.5 rounded-md text-muted hover:text-text hover:bg-border/60 transition-colors cursor-pointer"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         )}
-      </div>
-    </aside>
+
+        {/* Nav links */}
+        <nav className="flex-1 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
+          {NAV_LINKS.map((item) => {
+            const active = isLinkActive(item.to);
+            const Icon = item.icon;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                title={isCollapsed ? item.label : undefined}
+                className={`flex items-center h-10 px-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  active
+                    ? 'bg-border text-text font-semibold'
+                    : 'text-muted hover:text-text hover:bg-border/40'
+                }`}
+              >
+                <span className="w-5 flex items-center justify-center shrink-0">
+                  <Icon className="w-4 h-4" />
+                </span>
+                {!isCollapsed && (
+                  <span className="ml-3 whitespace-nowrap truncate">
+                    {item.label}
+                  </span>
+                )}
+              </NavLink>
+            );
+          })}
+        </nav>
+
+        {/* Bottom user */}
+        <div className="pt-3 border-t border-border overflow-hidden shrink-0">
+          {user && (
+            <div className="flex items-center gap-2.5 px-1 py-1">
+              <UserButton afterSignOutUrl="/" />
+              {!isCollapsed && (
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-text truncate">{user.name || 'Account'}</p>
+                  <p className="text-[11px] text-muted truncate">{user.email}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }
 

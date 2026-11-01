@@ -1,212 +1,660 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+/**
+ * CreateInvoice.jsx — GST Invoice Editor
+ *
+ * Design System:
+ *  - Colors: only semantic names (bg, surface, border, text, muted, faint, accent, danger)
+ *  - Scale: inputs h-10, rounded-lg, text-sm, gap-4, sections space-y-8
+ *  - Font: Inter everywhere (no monospace); tabular-nums on all amounts
+ *  - Type scale: title 20px/600, section heading 15px/600, label 13px/500 muted,
+ *    input 14px/400, helper 12px faint, column headers 12px/500 muted
+ *  - Shared primitives: Field, Input, Select, SectionHeading, Button, Divider, Textarea
+ *
+ * Grid & Layout Alignment:
+ *  - Right edge alignment: Title bar, banners, form card, and Summary share grid-cols-[minmax(0,1fr)_360px] gap-8
+ *  - Items row fills form width: grid-cols-[minmax(0,1fr)_110px_80px_110px_90px_110px_40px] gap-3, no extra left indent
+ *  - Single "Full preview" button under Print / PDF; Live Preview card removed
+ *  - Dismissible missing-business-info banner (local state)
+ *  - Reduced vertical spacing above the form
+ */
+
+import React, {
+  useState, useEffect, useRef, useMemo, useCallback
+} from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  ArrowLeft,
-  AlertCircle,
-  Trash2,
-  Plus,
-  Printer,
-  Download,
-  ChevronDown,
-  Sparkles
+  ArrowLeft, Trash2, Plus, Printer, Download, Save,
+  ChevronDown, Sparkles, AlertCircle, Eye, X
 } from 'lucide-react';
 
-import { useAuth } from '../context/AuthContext';
-import { invoicesApi } from '../api/invoices.api';
-import { businessApi } from '../api/business.api';
-import { customersApi } from '../api/customers.api';
-import { productsApi } from '../api/products.api';
+import { useAuth }          from '../context/AuthContext';
+import { invoicesApi }      from '../api/invoices.api';
+import { businessApi }      from '../api/business.api';
+import { customersApi }     from '../api/customers.api';
+import { productsApi }      from '../api/products.api';
+import { CustomerDrawer }   from '../components/customer/CustomerDrawer';
 
-import { determineTaxType, calculateInvoiceTotal, calculateItemTotal } from '../gst/calculateGST';
-import { validateGSTIN } from '../gst/validateGSTIN';
+import { determineTaxType, calculateInvoiceTotal } from '../gst/calculateGST';
+import { validateGSTIN }                            from '../gst/validateGSTIN';
 import { generateNextInvoiceNumber, isDuplicateInvoiceNumber } from '../utils/invoiceNumber';
-import { getTodayInputDate, formatDate } from '../utils/date';
-import { formatCurrency, numberToWords } from '../utils/currency';
-import { INDIAN_STATES, GST_RATES, getStateByName, getStateByCode } from '../gst/taxRules';
-import { useAppNavigate } from '../utils/navigation';
-import { ProductPickerModal } from '../components/invoice/ProductPickerModal';
+import { getTodayInputDate, formatDate }            from '../utils/date';
+import { formatCurrency, numberToWords }            from '../utils/currency';
+import { INDIAN_STATES }                            from '../gst/taxRules';
+import { useAppNavigate }                           from '../utils/navigation';
+import { ProductPickerModal }                       from '../components/invoice/ProductPickerModal';
+import {
+  Field, Input, Select, Button, SectionHeading, Divider, Textarea
+} from '../components/invoice/InvoiceEditorUI';
 
-/**
- * Fast, inline Customer Combobox:
- * Type to enter a customer name or pick from existing directory.
- * Selecting a customer automatically populates GSTIN, address, state, phone and email.
- */
-function CustomerCombobox({
-  value,
-  onChange,
-  onSelectCustomer,
-  customers = [],
-  error,
-  id = 'customer-name'
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef(null);
+// ── Date Helpers (DD/MM/YYYY in UI, ISO in state) ─────────────────────────────
+
+function isoToDisplay(iso) {
+  if (!iso) return '';
+  const parts = iso.split('-');
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    return `${d}/${m}/${y}`;
+  }
+  return iso;
+}
+
+function displayToIso(display) {
+  if (!display) return '';
+  const clean = display.trim();
+  const parts = clean.split(/[/.-]/);
+  if (parts.length === 3) {
+    const [d, m, y] = parts;
+    if (d && m && y && y.length === 4) {
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+  }
+  return clean;
+}
+
+const EMPTY_ITEM = () => ({
+  description: '',
+  hsnSac:      '',
+  quantity:    '1',
+  unit:        'Nos',
+  rate:        '0',
+  discount:    0,
+  gstRate:     18,
+});
+
+// Exact grid template for items: Description flexible, Qty >= 80px, fills entire width
+const ITEMS_GRID_CLASS = 'grid-cols-[minmax(0,1fr)_110px_80px_110px_90px_110px_40px] gap-3';
+
+// ── CustomerCombobox ──────────────────────────────────────────────────────────
+// Accepts onQuickAdd(name) to open the CustomerDrawer pre-filled with the typed name.
+function CustomerCombobox({ value, onChange, onSelectCustomer, customers = [], error, id = 'customer-name', onQuickAdd }) {
+  const [open, setOpen] = useState(false);
+  const containerRef    = useRef(null);
 
   const filtered = useMemo(() => {
-    if (!value || !value.trim()) return customers.slice(0, 10);
-    const q = value.toLowerCase().trim();
+    if (!value.trim()) return customers.slice(0, 8);
+    const q = value.toLowerCase();
     return customers
-      .filter(
-        (c) =>
-          (c.name && c.name.toLowerCase().includes(q)) ||
-          (c.gstin && c.gstin.toLowerCase().includes(q)) ||
-          (c.phone && c.phone.includes(q))
+      .filter(c =>
+        (c.name  && c.name.toLowerCase().includes(q)) ||
+        (c.gstin && c.gstin.toLowerCase().includes(q))
       )
-      .slice(0, 10);
+      .slice(0, 8);
   }, [customers, value]);
 
+  // Show quick-add option when typed text doesn't match any customer exactly
+  const showQuickAdd = Boolean(
+    onQuickAdd &&
+    value.trim() &&
+    !customers.some(c => c.name?.toLowerCase() === value.trim().toLowerCase())
+  );
+
   useEffect(() => {
-    function handleClickOutside(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
+    function outside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', outside);
+    return () => document.removeEventListener('mousedown', outside);
   }, []);
 
   return (
     <div ref={containerRef} className="relative w-full">
       <div className="relative">
-        <input
+        <Input
           id={id}
           type="text"
           value={value}
-          onChange={(e) => {
-            onChange(e.target.value);
-            setIsOpen(true);
-          }}
-          onFocus={() => setIsOpen(true)}
-          placeholder="Type customer name or choose from list"
           autoComplete="off"
-          className={`w-full h-12 rounded-[10px] bg-[#0F1116] border ${
-            error ? 'border-rose-500' : 'border-[#2B3040]'
-          } px-3.5 text-[15px] text-[#F2F4F8] placeholder-[#8B94A8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5] transition-all`}
+          placeholder="Customer name"
+          error={error}
+          onChange={e => { onChange(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
         />
         {customers.length > 0 && (
           <button
             type="button"
             tabIndex={-1}
-            onClick={() => setIsOpen(!isOpen)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8B94A8] hover:text-[#F2F4F8] p-1 cursor-pointer"
+            onClick={() => setOpen(o => !o)}
             aria-label="Toggle saved customers"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-text p-1 cursor-pointer"
           >
-            <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
           </button>
         )}
       </div>
 
-      {isOpen && filtered.length > 0 && (
+      {open && (filtered.length > 0 || showQuickAdd) && (
         <ul
-          className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-[10px] bg-[#14161C] border border-[#2B3040] shadow-2xl py-1 text-xs"
           role="listbox"
+          className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-lg bg-surface border border-border shadow-xl py-1 text-sm"
         >
-          {filtered.map((c) => (
+          {filtered.map(c => (
             <li
               key={c._id || c.id}
               role="option"
-              onClick={() => {
-                onSelectCustomer(c);
-                setIsOpen(false);
-              }}
-              className="px-3.5 py-2.5 hover:bg-[#1F1F23] cursor-pointer flex items-center justify-between transition-colors border-b border-[#232733] last:border-0"
+              onClick={() => { onSelectCustomer(c); setOpen(false); }}
+              className="px-3 py-2.5 hover:bg-border cursor-pointer flex items-center justify-between border-b border-border last:border-0"
             >
               <div>
-                <div className="font-semibold text-[#F2F4F8] text-[13px]">{c.name}</div>
-                <div className="text-[11px] text-[#8B94A8] mt-0.5">
-                  {c.gstin ? `GSTIN: ${c.gstin}` : 'Unregistered (B2C)'}
+                <div className="font-medium text-text">{c.name}</div>
+                <div className="text-xs text-muted mt-0.5">
+                  {c.gstin ? `GSTIN: ${c.gstin}` : 'Unregistered'}
                   {c.state ? ` · ${c.state}` : ''}
                 </div>
               </div>
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#1F1F23] text-[#818CF8]">
-                Select
-              </span>
+              <span className="text-xs text-accent font-medium ml-4 shrink-0">Select</span>
             </li>
           ))}
+
+          {showQuickAdd && (
+            <li
+              role="option"
+              onClick={() => { setOpen(false); onQuickAdd(value.trim()); }}
+              className="px-3 py-2.5 hover:bg-accent/10 cursor-pointer flex items-center gap-2 text-accent font-medium border-t border-border"
+            >
+              <Plus className="w-3.5 h-3.5 shrink-0" />
+              Add "{value.trim()}" as new customer
+            </li>
+          )}
         </ul>
       )}
     </div>
   );
 }
 
+// ── DateInput (DD/MM/YYYY in UI, ISO in state) ────────────────────────────────
+function DateInput({ id, value, onChange, placeholder, error }) {
+  const [display, setDisplay] = useState(() => isoToDisplay(value));
+
+  useEffect(() => { setDisplay(isoToDisplay(value)); }, [value]);
+
+  return (
+    <Input
+      id={id}
+      type="text"
+      value={display}
+      placeholder={placeholder || 'DD/MM/YYYY'}
+      error={error}
+      maxLength={10}
+      onChange={e => {
+        const raw = e.target.value;
+        setDisplay(raw);
+        onChange(displayToIso(raw));
+      }}
+    />
+  );
+}
+
+// ── Items Header Row ──────────────────────────────────────────────────────────
+function ItemsHeader() {
+  return (
+    <div
+      className={`hidden @[680px]/form:grid items-center ${ITEMS_GRID_CLASS} py-1 text-xs font-medium text-muted uppercase tracking-wide`}
+    >
+      <div>Description</div>
+      <div>HSN/SAC</div>
+      <div className="text-right">Qty</div>
+      <div className="text-right">Rate</div>
+      <div>GST</div>
+      <div className="text-right">Amount</div>
+      <div />
+    </div>
+  );
+}
+
+// ── ItemRow (Desktop single-line vs Mobile stacked) ───────────────────────────
+function ItemRow({ item, idx, totalRows, errors, onChange, onRemove }) {
+  const descRef   = useRef(null);
+  const amount    = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+  const descError = errors[`item_${idx}_description`];
+  const qtyError  = errors[`item_${idx}_quantity`];
+  const rateError = errors[`item_${idx}_rate`];
+
+  // Auto-resize description textarea
+  useEffect(() => {
+    const el = descRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }, [item.description]);
+
+  return (
+    <>
+      {/* ── Desktop: single-line row (aligned flush with Items heading) ── */}
+      <div
+        className={`hidden @[680px]/form:grid items-start ${ITEMS_GRID_CLASS} py-1.5 rounded-lg transition-colors hover:bg-bg`}
+      >
+        {/* Description: single-line by default, auto-resizes on long text */}
+        <div>
+          <textarea
+            ref={descRef}
+            id={`item_${idx}_description`}
+            rows={1}
+            placeholder="Item or service"
+            value={item.description}
+            onChange={e => {
+              onChange(idx, 'description', e.target.value);
+              const el = e.target;
+              el.style.height = 'auto';
+              el.style.height = el.scrollHeight + 'px';
+            }}
+            className={[
+              'w-full rounded-lg border px-3 py-2 text-sm font-normal text-text bg-surface placeholder:text-faint',
+              'focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent resize-none overflow-hidden leading-snug',
+              descError ? 'border-danger' : 'border-border',
+            ].join(' ')}
+            style={{ minHeight: '40px' }}
+          />
+          {descError && <p className="mt-0.5 text-xs text-danger">{descError}</p>}
+        </div>
+
+        {/* HSN/SAC */}
+        <div>
+          <Input
+            type="text"
+            placeholder="—"
+            value={item.hsnSac}
+            onChange={e => onChange(idx, 'hsnSac', e.target.value)}
+          />
+        </div>
+
+        {/* Qty: type="text" inputMode="numeric" (digits only, px-2 text-right) */}
+        <div>
+          <Input
+            id={`item_${idx}_quantity`}
+            type="text"
+            inputMode="numeric"
+            value={item.quantity ?? ''}
+            error={qtyError}
+            className="w-full px-2 text-right tabular-nums"
+            onChange={e => {
+              const digits = e.target.value.replace(/\D/g, '');
+              onChange(idx, 'quantity', digits);
+            }}
+          />
+        </div>
+
+        {/* Rate: inputMode="decimal" */}
+        <div>
+          <Input
+            id={`item_${idx}_rate`}
+            type="text"
+            inputMode="decimal"
+            value={item.rate ?? ''}
+            error={rateError}
+            className="w-full px-2 text-right tabular-nums"
+            onChange={e => {
+              const val = e.target.value;
+              if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                onChange(idx, 'rate', val);
+              }
+            }}
+          />
+        </div>
+
+        {/* GST: short label */}
+        <div>
+          <Select
+            value={item.gstRate}
+            onChange={e => onChange(idx, 'gstRate', Number(e.target.value))}
+          >
+            <option value={0}>0%</option>
+            <option value={5}>5%</option>
+            <option value={12}>12%</option>
+            <option value={18}>18%</option>
+            <option value={28}>28%</option>
+          </Select>
+        </div>
+
+        {/* Amount: read-only, tabular-nums, text-right */}
+        <div className="flex items-center justify-end h-10 text-sm font-medium tabular-nums text-right text-text">
+          {formatCurrency(amount)}
+        </div>
+
+        {/* Delete button: disabled when only one row remains */}
+        <div className="flex items-center justify-center h-10">
+          <button
+            type="button"
+            onClick={() => onRemove(idx)}
+            disabled={totalRows <= 1}
+            aria-label={`Remove item ${idx + 1}`}
+            title={totalRows <= 1 ? 'At least one item required' : 'Remove this item'}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-danger hover:bg-danger/10 disabled:opacity-20 disabled:cursor-not-allowed transition-colors cursor-pointer"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Mobile: stacked block (when form width < 680px) ── */}
+      <div className="@[680px]/form:hidden space-y-3 p-3 rounded-lg border border-border bg-bg">
+        <Field label="Description" error={descError}>
+          <textarea
+            rows={2}
+            placeholder="Item or service"
+            value={item.description}
+            onChange={e => onChange(idx, 'description', e.target.value)}
+            className={[
+              'w-full rounded-lg border px-3 py-2 text-sm font-normal text-text bg-surface placeholder:text-faint',
+              'focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent resize-y',
+              descError ? 'border-danger' : 'border-border',
+            ].join(' ')}
+          />
+        </Field>
+
+        <Field label="HSN/SAC" optional>
+          <Input
+            type="text"
+            placeholder="—"
+            value={item.hsnSac}
+            onChange={e => onChange(idx, 'hsnSac', e.target.value)}
+          />
+        </Field>
+
+        <div className="grid grid-cols-3 gap-2">
+          <Field label="Qty" error={qtyError}>
+            <Input
+              type="text"
+              inputMode="numeric"
+              value={item.quantity ?? ''}
+              error={qtyError}
+              className="w-full px-2 text-right tabular-nums"
+              onChange={e => {
+                const digits = e.target.value.replace(/\D/g, '');
+                onChange(idx, 'quantity', digits);
+              }}
+            />
+          </Field>
+          <Field label="Rate (₹)" error={rateError}>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={item.rate ?? ''}
+              error={rateError}
+              className="w-full px-2 text-right tabular-nums"
+              onChange={e => {
+                const val = e.target.value;
+                if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                  onChange(idx, 'rate', val);
+                }
+              }}
+            />
+          </Field>
+          <Field label="GST">
+            <Select
+              value={item.gstRate}
+              onChange={e => onChange(idx, 'gstRate', Number(e.target.value))}
+            >
+              <option value={0}>0%</option>
+              <option value={5}>5%</option>
+              <option value={12}>12%</option>
+              <option value={18}>18%</option>
+              <option value={28}>28%</option>
+            </Select>
+          </Field>
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t border-border">
+          <span className="text-sm font-medium text-text tabular-nums">
+            {formatCurrency(amount)}
+          </span>
+          <button
+            type="button"
+            onClick={() => onRemove(idx)}
+            disabled={totalRows <= 1}
+            aria-label={`Remove item ${idx + 1}`}
+            className="flex items-center gap-1 text-xs text-muted hover:text-danger disabled:opacity-20 disabled:cursor-not-allowed transition-colors cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Remove
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── TotalsPanel (Summary Card) ────────────────────────────────────────────────
+function TotalsPanel({ calc, isInterState, isInvoiceEmpty, onPrint, onDownloadPdf, onFullPreview }) {
+  const taxRows = isInterState
+    ? [{ label: 'IGST', value: calc.igst ?? 0 }]
+    : [
+        { label: 'CGST', value: calc.cgst ?? 0 },
+        { label: 'SGST', value: calc.sgst ?? 0 }
+      ];
+
+  return (
+    <div className="bg-surface rounded-xl border border-border p-5 space-y-4">
+      <SectionHeading>Summary</SectionHeading>
+      <Divider />
+
+      <div className="space-y-2.5 text-sm">
+        <div className="flex justify-between">
+          <span className="text-muted">Subtotal</span>
+          <span className="tabular-nums text-right font-medium text-text">{formatCurrency(calc.taxableAmount ?? 0)}</span>
+        </div>
+
+        {taxRows.map(r => (
+          <div key={r.label} className="flex justify-between">
+            <span className="text-muted">{r.label}</span>
+            <span className="tabular-nums text-right font-medium text-text">{formatCurrency(r.value)}</span>
+          </div>
+        ))}
+
+        {/* Total tax row gets same font-medium weight as Subtotal, CGST and SGST */}
+        <div className="flex justify-between">
+          <span className="text-muted">Total tax</span>
+          <span className="tabular-nums text-right font-medium text-text">{formatCurrency(calc.totalTax ?? 0)}</span>
+        </div>
+      </div>
+
+      <Divider />
+
+      <div className="flex items-center justify-between pt-1">
+        <span className="text-sm font-semibold text-text">Grand total</span>
+        <span className="text-lg font-semibold text-accent tabular-nums text-right">
+          {formatCurrency(calc.grandTotal ?? 0)}
+        </span>
+      </div>
+
+      {(calc.grandTotal ?? 0) > 0 && (
+        <p className="text-xs text-faint italic leading-relaxed pt-1 border-t border-border">
+          {numberToWords(calc.grandTotal)}
+        </p>
+      )}
+
+      {/* Export actions: Print & PDF disabled when invoice is empty */}
+      <div className="grid grid-cols-2 gap-2 pt-2">
+        <Button variant="secondary" size="sm" onClick={onPrint} disabled={isInvoiceEmpty}>
+          <Printer className="w-3.5 h-3.5" /> Print
+        </Button>
+        <Button variant="secondary" size="sm" onClick={onDownloadPdf} disabled={isInvoiceEmpty}>
+          <Download className="w-3.5 h-3.5" /> PDF
+        </Button>
+      </div>
+
+      {/* Single "Full preview" button under Print / PDF */}
+      <Button
+        variant="secondary"
+        size="sm"
+        className="w-full"
+        onClick={onFullPreview}
+      >
+        <Eye className="w-3.5 h-3.5" /> Full preview
+      </Button>
+    </div>
+  );
+}
+
+// ── Preview Sheet Modal ───────────────────────────────────────────────────────
+function PreviewSheet({ payload, calc, onClose }) {
+  const { business, customer, invoiceNumber, invoiceDate, dueDate, status, taxType, placeOfSupply, items } = payload;
+  const isInterState = taxType === 'INTER';
+
+  return (
+    <div className="bg-surface text-text rounded-xl border border-border p-6 sm:p-8 text-xs space-y-6">
+      <div className="flex items-start justify-between pb-4 border-b border-border">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="w-7 h-7 rounded-lg bg-border text-text flex items-center justify-center text-xs font-semibold">₹</span>
+            <h2 className="text-sm font-semibold text-text uppercase tracking-wider">Tax Invoice</h2>
+          </div>
+          <p className="text-xs text-faint mt-1">Original for Recipient · Rule 46 CGST Rules</p>
+        </div>
+        <div className="text-right flex flex-col items-end gap-1">
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-muted hover:text-text p-1 cursor-pointer"
+              aria-label="Close preview"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium uppercase bg-border text-muted">
+            {status || 'Draft'}
+          </span>
+          <div className="text-sm font-semibold text-text tabular-nums">{invoiceNumber || 'INV-DRAFT'}</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="p-3 rounded-lg bg-bg border border-border space-y-1">
+          <span className="text-xs font-medium text-faint uppercase tracking-wider block">From</span>
+          <div className="font-semibold text-text">{business?.businessName || 'Your Business'}</div>
+          {business?.gstin && <div className="text-muted">GSTIN: {business.gstin}</div>}
+          {business?.address && <div className="text-muted whitespace-pre-line">{business.address}</div>}
+        </div>
+        <div className="p-3 rounded-lg bg-bg border border-border space-y-1">
+          <span className="text-xs font-medium text-faint uppercase tracking-wider block">Bill To</span>
+          <div className="font-semibold text-text">{customer?.name || '—'}</div>
+          {customer?.gstin && <div className="text-muted">GSTIN: {customer.gstin}</div>}
+          {customer?.address && <div className="text-muted whitespace-pre-line">{customer.address}</div>}
+          {placeOfSupply && <div className="text-muted">{placeOfSupply}</div>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4 text-xs">
+        <div><span className="text-faint block">Invoice No.</span><span className="font-medium text-text">{invoiceNumber}</span></div>
+        <div><span className="text-faint block">Date</span><span className="font-medium text-text">{formatDate(invoiceDate)}</span></div>
+        <div><span className="text-faint block">Due</span><span className="font-medium text-text">{dueDate ? formatDate(dueDate) : 'Immediate'}</span></div>
+      </div>
+
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b border-border text-faint text-xs uppercase tracking-wide">
+            {['#', 'Description', 'HSN', 'Qty', 'Rate', 'GST', 'Amount'].map(h => (
+              <th key={h} className={`py-2 px-1 font-medium ${['Qty', 'Rate', 'GST', 'Amount'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {(calc.items || items).map((it, i) => (
+            <tr key={i}>
+              <td className="py-2 px-1 text-faint">{i + 1}</td>
+              <td className="py-2 px-1 text-text">{it.description}</td>
+              <td className="py-2 px-1 text-muted">{it.hsnSac || '—'}</td>
+              <td className="py-2 px-1 text-right tabular-nums">{it.quantity}</td>
+              <td className="py-2 px-1 text-right tabular-nums">{formatCurrency(it.rate)}</td>
+              <td className="py-2 px-1 text-right tabular-nums">{it.gstRate}%</td>
+              <td className="py-2 px-1 text-right tabular-nums font-medium">{formatCurrency((parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="flex justify-end pt-2">
+        <div className="w-56 space-y-1.5 text-xs">
+          <div className="flex justify-between"><span className="text-muted">Subtotal</span><span className="tabular-nums text-right font-medium">{formatCurrency(calc.taxableAmount ?? 0)}</span></div>
+          {isInterState
+            ? <div className="flex justify-between"><span className="text-muted">IGST</span><span className="tabular-nums text-right">{formatCurrency(calc.igst ?? 0)}</span></div>
+            : <>
+                <div className="flex justify-between"><span className="text-muted">CGST</span><span className="tabular-nums text-right">{formatCurrency(calc.cgst ?? 0)}</span></div>
+                <div className="flex justify-between"><span className="text-muted">SGST</span><span className="tabular-nums text-right">{formatCurrency(calc.sgst ?? 0)}</span></div>
+              </>
+          }
+          <div className="border-t border-border pt-1.5 flex justify-between font-semibold text-text text-sm">
+            <span>Grand Total</span><span className="tabular-nums text-right text-accent">{formatCurrency(calc.grandTotal ?? 0)}</span>
+          </div>
+          <p className="text-xs text-faint italic">{numberToWords(calc.grandTotal ?? 0)}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Main CreateInvoice Component
+// ═══════════════════════════════════════════════════════════════════════════════
+
 export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavigate }) {
-  const params = useParams();
+  const params      = useParams();
   const appNavigate = useAppNavigate();
-  const onNavigate = propOnNavigate || appNavigate;
-  const invoiceId = propInvoiceId || params.id;
-  const isEditing = Boolean(invoiceId);
+  const onNavigate  = propOnNavigate || appNavigate;
+  const invoiceId   = propInvoiceId  || params.id;
+  const isEditing   = Boolean(invoiceId);
   const { isAuthenticated } = useAuth();
 
-  // Loading & submit states
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [viewMode, setViewMode] = useState('editor'); // 'editor' | 'preview'
-  const [errors, setErrors] = useState({});
-  const [isDirty, setIsDirty] = useState(false);
-  const [showContactDetails, setShowContactDetails] = useState(false);
-  const [showProductPicker, setShowProductPicker] = useState(false);
+  // State
+  const [loading,            setLoading]           = useState(true);
+  const [saving,             setSaving]            = useState(false);
+  const [showPreviewModal,   setShowPreviewModal]  = useState(false);
+  const [errors,             setErrors]            = useState({});
+  const [isDirty,            setIsDirty]           = useState(false);
+  const [showContactDetails, setShowContactDetails]= useState(false);
+  const [showProductPicker,  setShowProductPicker] = useState(false);
+  const [noticeDismissed,    setNoticeDismissed]   = useState(false);
+  const [customerDrawerOpen, setCustomerDrawerOpen]= useState(false);
+  const [customerDrawerName, setCustomerDrawerName]= useState('');
 
-  // Business & Customers & Settings from DB
-  const [business, setBusiness] = useState(null);
-  const [customers, setCustomers] = useState([]);
+  // Business & DB Data
+  const [business,         setBusiness]         = useState(null);
+  const [customers,        setCustomers]        = useState([]);
   const [existingInvoices, setExistingInvoices] = useState([]);
-  const [settings, setSettings] = useState(null);
+  const [settings,         setSettings]         = useState(null);
 
-  // Core Form State
-  const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [invoiceDate, setInvoiceDate] = useState(getTodayInputDate());
-  const [dueDate, setDueDate] = useState('');
-  const [status, setStatus] = useState('Draft');
-  const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [customerData, setCustomerData] = useState({
-    name: '',
-    gstin: '',
-    address: '',
-    state: '',
-    phone: '',
-    email: ''
-  });
-  const [placeOfSupply, setPlaceOfSupply] = useState('');
-  const [items, setItems] = useState([
-    {
-      description: '',
-      hsnSac: '',
-      quantity: 1,
-      unit: 'Nos',
-      rate: 0,
-      discount: 0,
-      gstRate: 18
-    }
-  ]);
-  const [notes, setNotes] = useState('');
-  const [terms, setTerms] = useState('');
-  const [bankDetails, setBankDetails] = useState({
-    bankName: '',
-    accountNumber: '',
-    ifscCode: '',
-    branch: '',
-    upiId: ''
-  });
+  // Form State
+  const [invoiceNumber,      setInvoiceNumber]     = useState('');
+  const [invoiceDate,        setInvoiceDate]       = useState(getTodayInputDate());
+  const [dueDate,            setDueDate]           = useState('');
+  const [status,             setStatus]            = useState('Draft');
+  const [selectedCustomerId, setSelectedCustomerId]= useState('');
+  const [customerData,       setCustomerData]      = useState({ name: '', gstin: '', address: '', state: '', phone: '', email: '' });
+  const [placeOfSupply,      setPlaceOfSupply]     = useState('');
+  const [items,              setItems]             = useState([EMPTY_ITEM()]);
+  const [notes,              setNotes]             = useState('');
+  const [terms,              setTerms]             = useState('');
+  const [bankDetails,        setBankDetails]       = useState({ bankName: '', accountNumber: '', ifscCode: '', branch: '', upiId: '' });
 
-  // Ref array for item description inputs to support auto-focus on new row
   const itemDescriptionRefs = useRef([]);
 
-  // Warn on unsaved changes before leaving
+  // Unsaved changes prompt
   useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (isDirty && !saving) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    const handle = e => { if (isDirty && !saving) { e.preventDefault(); e.returnValue = ''; } };
+    window.addEventListener('beforeunload', handle);
+    return () => window.removeEventListener('beforeunload', handle);
   }, [isDirty, saving]);
 
-  // Load initial setup data
-  useEffect(() => {
-    loadSetupData();
-  }, [invoiceId, isAuthenticated]);
+  // Load initial data
+  useEffect(() => { loadSetupData(); }, [invoiceId, isAuthenticated]);
 
   const loadSetupData = async () => {
     try {
@@ -214,30 +662,23 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
       const [bRes, cRes, iRes] = await Promise.all([
         businessApi.get(),
         customersApi.list({ limit: 100 }),
-        invoicesApi.list({ limit: 100 })
+        invoicesApi.list({ limit: 100 }),
       ]);
-
-      const biz = bRes?.data || null;
+      const biz      = bRes?.data || null;
       const custList = Array.isArray(cRes?.data) ? cRes.data : (cRes?.data?.customers || []);
-      const invList = Array.isArray(iRes?.data) ? iRes.data : (iRes?.data?.invoices || []);
-
+      const invList  = Array.isArray(iRes?.data) ? iRes.data : (iRes?.data?.invoices  || []);
       const sets = {
-        invoicePrefix: biz?.invoiceSettings?.invoicePrefix || 'INV/',
+        invoicePrefix:  biz?.invoiceSettings?.invoicePrefix  || 'INV/',
         startingNumber: biz?.invoiceSettings?.startingNumber || 1,
-        defaultNotes: biz?.invoiceSettings?.defaultNotes || 'Thank you for your business!',
-        defaultTerms: biz?.invoiceSettings?.defaultTerms || 'Payment due within 15 days.',
-        bankDetails: biz?.bankDetails || {}
+        defaultNotes:   biz?.invoiceSettings?.defaultNotes   || 'Thank you for your business!',
+        defaultTerms:   biz?.invoiceSettings?.defaultTerms   || 'Payment due within 15 days.',
+        bankDetails:    biz?.bankDetails || {},
       };
-
-      setBusiness(biz);
-      setCustomers(custList);
-      setExistingInvoices(invList);
-      setSettings(sets);
+      setBusiness(biz); setCustomers(custList); setExistingInvoices(invList); setSettings(sets);
 
       if (isEditing) {
         const res = await invoicesApi.get(invoiceId);
         const inv = res?.data || null;
-
         if (inv) {
           setInvoiceNumber(inv.invoiceNumber || '');
           setInvoiceDate(inv.invoiceDate || getTodayInputDate());
@@ -246,1180 +687,601 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
           setSelectedCustomerId(inv.customerId ? String(inv.customerId) : '');
           setCustomerData(inv.customer || {});
           setPlaceOfSupply(inv.placeOfSupply || inv.customer?.state || '');
-          setItems(inv.items?.length ? inv.items : []);
+          setItems(inv.items?.length ? inv.items : [EMPTY_ITEM()]);
           setNotes(inv.notes || '');
           setTerms(inv.terms || '');
           setBankDetails(inv.bankDetails || sets.bankDetails || {});
-          if (inv.customer?.email || inv.customer?.phone) {
-            setShowContactDetails(true);
-          }
+          if (inv.customer?.email || inv.customer?.phone) setShowContactDetails(true);
         }
       } else {
-        const nextNum = generateNextInvoiceNumber(
-          sets.invoicePrefix,
-          sets.startingNumber,
-          invList
-        );
-        setInvoiceNumber(nextNum);
+        setInvoiceNumber(generateNextInvoiceNumber(sets.invoicePrefix, sets.startingNumber, invList));
         setNotes(sets.defaultNotes);
         setTerms(sets.defaultTerms);
-        if (sets.bankDetails) {
-          setBankDetails(sets.bankDetails);
-        }
-        setStatus('Draft');
+        if (sets.bankDetails) setBankDetails(sets.bankDetails);
       }
     } catch (err) {
-      console.error('Failed to initialize invoice editor:', err);
-      setErrors({ global: err.message || 'Failed to initialize invoice editor.' });
+      console.error(err);
+      setErrors({ global: err.message || 'Failed to load editor.' });
     } finally {
       setLoading(false);
     }
   };
 
-  // Determine current tax type
-  const effectivePlaceOfSupply = placeOfSupply || customerData.state || business?.state || '';
-  const taxType = determineTaxType(business?.state, effectivePlaceOfSupply);
+  // Place of supply tax determination
+  const effectivePos = placeOfSupply || customerData.state || business?.state || '';
+  const taxType      = determineTaxType(business?.state, effectivePos);
+  const isInterState = taxType === 'INTER';
+  const calc         = useMemo(() => calculateInvoiceTotal(items, taxType), [items, taxType]);
 
-  // Compute live calculations in background
-  const invoiceCalculation = useMemo(() => {
-    return calculateInvoiceTotal(items, taxType);
-  }, [items, taxType]);
+  // Place of supply hint: show nothing until state chosen; compare with business state if available
+  const placeOfSupplyHint = useMemo(() => {
+    if (!placeOfSupply) return undefined;
+    if (!business?.state) return undefined;
+    const isInter = placeOfSupply.toLowerCase().trim() !== business.state.toLowerCase().trim();
+    return isInter ? 'Inter-state: IGST' : 'Intra-state: CGST + SGST';
+  }, [placeOfSupply, business?.state]);
 
-  const handleSelectCustomer = (found) => {
+  // Invoice empty check for disabling Print and PDF buttons
+  const isInvoiceEmpty = !customerData.name?.trim() && (calc.grandTotal ?? 0) === 0;
+
+  // Customer selection
+  const handleSelectCustomer = c => {
     setIsDirty(true);
-    setSelectedCustomerId(String(found._id || found.id || ''));
-    setCustomerData({
-      name: found.name || '',
-      gstin: found.gstin || '',
-      address: found.address || '',
-      state: found.state || '',
-      phone: found.phone || '',
-      email: found.email || ''
-    });
-    if (found.state) {
-      setPlaceOfSupply(found.state);
-    }
-    if (found.email || found.phone) {
-      setShowContactDetails(true);
-    }
-    setErrors((prev) => ({ ...prev, customerName: null, placeOfSupply: null, gstin: null }));
+    setSelectedCustomerId(String(c._id || c.id || ''));
+    setCustomerData({ name: c.name || '', gstin: c.gstin || '', address: c.address || '', state: c.state || '', phone: c.phone || '', email: c.email || '' });
+    if (c.state) setPlaceOfSupply(c.state);
+    if (c.email || c.phone) setShowContactDetails(true);
+    setErrors(p => ({ ...p, customerName: null, placeOfSupply: null, gstin: null }));
   };
 
-  const handleCustomerNameChange = (name) => {
-    setIsDirty(true);
-    setSelectedCustomerId('');
-    setCustomerData((prev) => ({ ...prev, name }));
-    setErrors((prev) => ({ ...prev, customerName: null }));
+  const handleCustomerNameChange = name => {
+    setIsDirty(true); setSelectedCustomerId('');
+    setCustomerData(p => ({ ...p, name }));
+    setErrors(p => ({ ...p, customerName: null }));
   };
 
-  // Item row operations
-  const handleItemChange = (index, field, value) => {
+  // Quick-add customer from invoice combobox
+  const handleQuickAddCustomer = useCallback((prefillName) => {
+    setCustomerDrawerName(prefillName);
+    setCustomerDrawerOpen(true);
+  }, []);
+
+  const handleSavedQuickCustomer = useCallback(async (formData) => {
+    const res = await customersApi.create(formData);
+    const saved = res?.data || formData;
+    // Add to local list
+    setCustomers(prev => [...prev, saved]);
+    // Auto-select the new customer
+    handleSelectCustomer(saved);
+    setCustomerDrawerOpen(false);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Items
+  const handleItemChange = useCallback((idx, field, value) => {
     setIsDirty(true);
-    const updated = [...items];
-    updated[index] = {
-      ...updated[index],
-      [field]: value
-    };
-    setItems(updated);
-    setErrors((prev) => {
-      const copy = { ...prev };
-      delete copy[`item_${index}_${field}`];
-      delete copy.items;
-      return copy;
-    });
-  };
+    setItems(prev => { const n = [...prev]; n[idx] = { ...n[idx], [field]: value }; return n; });
+    setErrors(p => { const c = { ...p }; delete c[`item_${idx}_${field}`]; delete c.items; return c; });
+  }, []);
 
   const handleAddItem = () => {
     setIsDirty(true);
-    const newItems = [
-      ...items,
-      {
-        description: '',
-        hsnSac: '',
-        quantity: 1,
-        unit: 'Nos',
-        rate: 0,
-        discount: 0,
-        gstRate: 18
-      }
-    ];
-    setItems(newItems);
-    setTimeout(() => {
-      const idx = newItems.length - 1;
-      if (itemDescriptionRefs.current[idx]) {
-        itemDescriptionRefs.current[idx].focus();
-      }
-    }, 50);
+    setItems(prev => {
+      const next = [...prev, EMPTY_ITEM()];
+      setTimeout(() => { const el = itemDescriptionRefs.current[next.length - 1]; if (el) el.focus(); }, 50);
+      return next;
+    });
   };
 
-  const handleRemoveItem = (index) => {
+  const handleRemoveItem = idx => {
     if (items.length <= 1) return;
     setIsDirty(true);
-    const updated = items.filter((_, i) => i !== index);
-    setItems(updated);
+    setItems(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSelectProduct = (prod) => {
+  const handleSelectProduct = prod => {
     setIsDirty(true);
     const newItem = {
       description: prod.name ? `${prod.name}${prod.description ? `\n${prod.description}` : ''}` : '',
-      hsnSac: prod.hsnSac || '',
-      quantity: 1,
-      unit: prod.unit || 'Nos',
-      rate: prod.rate ?? prod.unitPrice ?? 0,
-      discount: 0,
-      gstRate: prod.gstRate ?? 18
+      hsnSac: prod.hsnSac || '', quantity: '1', unit: prod.unit || 'Nos',
+      rate: String(prod.rate ?? prod.unitPrice ?? 0), discount: 0, gstRate: prod.gstRate ?? 18,
     };
-
-    if (items.length === 1 && !items[0].description && !items[0].rate) {
-      setItems([newItem]);
-    } else {
-      setItems([...items, newItem]);
-    }
+    if (items.length === 1 && !items[0].description && !items[0].rate) setItems([newItem]);
+    else setItems(prev => [...prev, newItem]);
   };
 
-  // Build payload
-  const buildInvoicePayload = (targetStatus = status) => {
-    return {
-      invoiceNumber: invoiceNumber.trim(),
-      invoiceDate,
-      dueDate,
-      status: targetStatus,
-      customerId: selectedCustomerId
-        ? (isNaN(selectedCustomerId) ? selectedCustomerId : Number(selectedCustomerId))
-        : null,
-      customer: customerData,
-      business: business || {},
-      placeOfSupply: effectivePlaceOfSupply,
-      taxType,
-      items: invoiceCalculation.items,
-      taxableAmount: invoiceCalculation.taxableAmount,
-      cgst: invoiceCalculation.cgst,
-      sgst: invoiceCalculation.sgst,
-      igst: invoiceCalculation.igst,
-      totalTax: invoiceCalculation.totalTax,
-      grandTotal: invoiceCalculation.grandTotal,
-      roundOff: invoiceCalculation.roundOff,
-      netTotal: invoiceCalculation.netTotal,
-      notes,
-      terms,
-      bankDetails
-    };
-  };
+  // Payload
+  const buildPayload = (targetStatus = status) => ({
+    invoiceNumber: invoiceNumber.trim(), invoiceDate, dueDate, status: targetStatus,
+    customerId: selectedCustomerId ? (isNaN(selectedCustomerId) ? selectedCustomerId : Number(selectedCustomerId)) : null,
+    customer: customerData, business: business || {}, placeOfSupply: effectivePos, taxType,
+    items: calc.items, taxableAmount: calc.taxableAmount, cgst: calc.cgst, sgst: calc.sgst,
+    igst: calc.igst, totalTax: calc.totalTax, grandTotal: calc.grandTotal,
+    roundOff: calc.roundOff, netTotal: calc.netTotal, notes, terms, bankDetails,
+  });
 
-  // Validation on submit
+  // Validation
   const validateForm = (isDraft = false) => {
-    const newErrors = {};
-
-    if (!invoiceNumber || !invoiceNumber.trim()) {
-      newErrors.invoiceNumber = 'Invoice number is required.';
-    }
-
-    if (!invoiceDate) {
-      newErrors.invoiceDate = 'Invoice date is required.';
-    }
-
-    // Only validate full requirements when issuing
+    const errs = {};
+    if (!invoiceNumber.trim()) errs.invoiceNumber = 'Invoice number is required.';
+    if (!invoiceDate)          errs.invoiceDate   = 'Invoice date is required.';
     if (!isDraft) {
-      if (!customerData.name || !customerData.name.trim()) {
-        newErrors.customerName = 'Customer name is required.';
+      if (!customerData.name?.trim()) errs.customerName = 'Customer name is required.';
+      if (!effectivePos)              errs.placeOfSupply = 'Place of supply is required.';
+      if (customerData.gstin?.trim()) {
+        const g = validateGSTIN(customerData.gstin);
+        if (!g.isValid) errs.gstin = g.message || 'Invalid GSTIN format.';
       }
-
-      if (!effectivePlaceOfSupply) {
-        newErrors.placeOfSupply = 'Place of supply (State) is required for GST determination.';
-      }
-
-      if (customerData.gstin && customerData.gstin.trim()) {
-        const gstinCheck = validateGSTIN(customerData.gstin);
-        if (!gstinCheck.isValid) {
-          newErrors.gstin = gstinCheck.message || 'Invalid GSTIN format.';
-        }
-      }
-
       if (!items.length) {
-        newErrors.items = 'At least one item is required.';
+        errs.items = 'At least one item is required.';
       } else {
         items.forEach((item, idx) => {
-          if (!item.description || !item.description.trim()) {
-            newErrors[`item_${idx}_description`] = 'Description is required.';
-          }
-          const qty = parseFloat(item.quantity);
-          if (isNaN(qty) || qty <= 0) {
-            newErrors[`item_${idx}_quantity`] = 'Qty must be > 0.';
-          }
-          const rate = parseFloat(item.rate);
-          if (isNaN(rate) || rate < 0) {
-            newErrors[`item_${idx}_rate`] = 'Rate must be >= 0.';
-          }
+          if (!item.description?.trim()) errs[`item_${idx}_description`] = 'Required.';
+          if (isNaN(parseFloat(item.quantity)) || parseFloat(item.quantity) <= 0) errs[`item_${idx}_quantity`] = '> 0';
+          if (isNaN(parseFloat(item.rate))     || parseFloat(item.rate)     < 0) errs[`item_${idx}_rate`]     = '≥ 0';
         });
       }
     }
-
-    setErrors(newErrors);
-
-    // Focus & scroll to first error
-    const errorKeys = Object.keys(newErrors);
-    if (errorKeys.length > 0) {
-      const firstKey = errorKeys[0];
-      const elementId =
-        firstKey === 'customerName'
-          ? 'customer-name'
-          : firstKey === 'placeOfSupply'
-          ? 'place-of-supply'
-          : firstKey === 'invoiceNumber'
-          ? 'invoice-number'
-          : firstKey === 'invoiceDate'
-          ? 'invoice-date'
-          : firstKey.startsWith('item_')
-          ? firstKey
-          : null;
-
-      if (elementId) {
-        const el = document.getElementById(elementId);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.focus();
-        }
-      }
+    setErrors(errs);
+    const firstKey = Object.keys(errs)[0];
+    if (firstKey) {
+      const map = { customerName: 'customer-name', placeOfSupply: 'place-of-supply', invoiceNumber: 'invoice-number', invoiceDate: 'invoice-date' };
+      const el  = document.getElementById(map[firstKey] || firstKey);
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
       return false;
     }
-
     return true;
   };
 
-  const handleSave = async (targetStatus) => {
-    const isDraft = targetStatus === 'Draft';
-    const isValid = validateForm(isDraft);
-    if (!isValid) return;
-
-    // Check duplicate invoice number
-    const finalNumber = invoiceNumber.trim();
-    if (isDuplicateInvoiceNumber(finalNumber, invoiceId, existingInvoices)) {
-      setErrors({ invoiceNumber: `Invoice number "${finalNumber}" already exists.` });
-      const el = document.getElementById('invoice-number');
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        el.focus();
-      }
+  // Actions
+  const handleSave = async targetStatus => {
+    if (!validateForm(targetStatus === 'Draft')) return;
+    const finalNum = invoiceNumber.trim();
+    if (isDuplicateInvoiceNumber(finalNum, invoiceId, existingInvoices)) {
+      setErrors({ invoiceNumber: `"${finalNum}" already exists.` });
+      document.getElementById('invoice-number')?.focus();
       return;
     }
-
     try {
       setSaving(true);
-      const payload = buildInvoicePayload(targetStatus);
-
-      let savedId = invoiceId;
-      if (isEditing) {
-        await invoicesApi.update(invoiceId, payload);
-      } else {
-        const res = await invoicesApi.create(payload);
-        savedId = res?.data?._id || res?.data?.id;
-      }
-
+      const payload = buildPayload(targetStatus);
+      let savedId   = invoiceId;
+      if (isEditing) { await invoicesApi.update(invoiceId, payload); }
+      else { const res = await invoicesApi.create(payload); savedId = res?.data?._id || res?.data?.id; }
       setIsDirty(false);
       onNavigate('invoice-details', savedId);
     } catch (err) {
-      console.error('Failed to save invoice:', err);
-      setErrors({ global: err.message || 'Failed to save invoice. Please try again.' });
+      console.error(err);
+      setErrors({ global: err.message || 'Failed to save invoice.' });
     } finally {
       setSaving(false);
     }
   };
 
   const handleBack = () => {
-    if (isDirty) {
-      const confirmed = window.confirm('You have unsaved changes. Discard and return to invoices?');
-      if (!confirmed) return;
-    }
+    if (isDirty && !window.confirm('Discard unsaved changes?')) return;
     onNavigate('invoices');
   };
 
   const handleDownloadPdf = async () => {
     try {
       const { generateInvoicePDF } = await import('../pdf/generateInvoicePDF');
-      generateInvoicePDF(buildInvoicePayload(), { action: 'download' });
-    } catch (err) {
-      console.error('Failed to generate PDF:', err);
-      alert('Failed to generate invoice PDF.');
-    }
+      generateInvoicePDF(buildPayload(), { action: 'download' });
+    } catch (err) { console.error(err); alert('Failed to generate PDF.'); }
   };
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center py-16 bg-[#0B0C10] text-[#F2F4F8]">
-        <div className="w-8 h-8 rounded-full border-2 border-[#2B3040] border-t-[#4F46E5] animate-spin" />
-        <p className="mt-3 text-xs text-[#8B94A8] font-medium">Preparing invoice editor...</p>
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 bg-bg text-text">
+        <div className="w-7 h-7 rounded-full border-2 border-border border-t-accent animate-spin" />
+        <p className="text-sm text-muted">Preparing invoice editor…</p>
       </div>
     );
   }
 
-  const isInterState = taxType === 'INTER';
-  const supplierState = business?.state || '';
-  const customerState = effectivePlaceOfSupply;
+  const missingBizInfo = !business?.businessName || !business?.gstin;
 
   return (
-    <div className="min-h-screen bg-[#0B0C10] text-[#F2F4F8] font-sans">
-      {/* ── 1. HEADER (sticky top bar) ────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 bg-[#0F1116] border-b border-[#232733] px-4 sm:px-6 py-3">
-        <div className="max-w-[880px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Left: Back button + Breadcrumb + Title + Status chip */}
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={handleBack}
-              aria-label="Back to invoices"
-              className="w-9 h-9 shrink-0 rounded-full border border-[#2B3040] bg-[#14161C] hover:bg-[#1F1F23] text-[#F2F4F8] flex items-center justify-center transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <div className="min-w-0">
-              <div className="text-[11px] text-[#8B94A8] font-medium leading-none mb-1">
-                Invoices / {isEditing ? 'Edit' : 'New'}
+    <div className="w-full bg-bg text-text font-sans pb-28 lg:pb-12">
+
+      {/* ══ STICKY HEADER AREA (Reduced vertical padding, sticky below mobile top bar) ══ */}
+      <header className="sticky top-14 md:top-0 z-30 bg-surface border-b border-border">
+        <div className="mx-auto max-w-screen-xl px-4 sm:px-6">
+
+          {/* Row 1: Back + Title + Status + Action buttons */}
+          <div className="flex items-center justify-between gap-2 sm:gap-4 py-2">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={handleBack}
+                aria-label="Back to invoices"
+                className="w-8 h-8 shrink-0 rounded-full border border-border bg-bg hover:bg-border text-text flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <div className="min-w-0">
+                <p className="text-xs text-muted leading-none mb-0.5 truncate">Invoices / {isEditing ? 'Edit' : 'New'}</p>
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                  <h1 className="text-base sm:text-[20px] font-semibold text-text leading-tight tracking-tight truncate">
+                    {isEditing ? 'Edit invoice' : 'New GST invoice'}
+                  </h1>
+                  <span className="text-[11px] sm:text-xs font-medium px-2 py-0.5 rounded-full bg-border text-muted shrink-0">
+                    {status}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-base sm:text-lg font-semibold text-[#F2F4F8] tracking-tight leading-tight">
-                  {isEditing ? 'Edit GST tax invoice' : 'New GST tax invoice'}
-                </h1>
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#1E1B4B] text-[#A5B4FC] border border-[#4F46E5]/40 leading-none">
-                  {status || 'Draft'}
-                </span>
-              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleSave('Draft')}
+                disabled={saving}
+                aria-label="Save draft"
+                className="h-8 px-2.5 sm:px-3 text-xs shrink-0 flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Save draft</span>
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => handleSave('Issued')}
+                disabled={saving}
+                aria-label="Save and issue"
+                className="h-8 px-2.5 sm:px-3 text-xs whitespace-nowrap shrink-0"
+              >
+                {saving ? 'Saving…' : (
+                  <>
+                    <span className="hidden sm:inline">Save & issue</span>
+                    <span className="sm:hidden">Issue</span>
+                  </>
+                )}
+              </Button>
             </div>
           </div>
 
-          {/* Right: Segmented Editor/Preview toggle + Action buttons */}
-          <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
-            {/* Segmented Toggle: Editor | Preview */}
-            <div className="inline-flex p-1 bg-[#14161C] border border-[#232733] rounded-[10px] text-xs">
-              <button
-                type="button"
-                onClick={() => setViewMode('editor')}
-                className={`px-3 py-1.5 rounded-[8px] font-medium transition-all cursor-pointer ${
-                  viewMode === 'editor'
-                    ? 'bg-[#27272A] text-[#FAFAFA] font-semibold shadow-xs'
-                    : 'text-[#8B94A8] hover:text-[#FAFAFA]'
-                }`}
-              >
-                Editor
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('preview')}
-                className={`px-3 py-1.5 rounded-[8px] font-medium transition-all cursor-pointer ${
-                  viewMode === 'preview'
-                    ? 'bg-[#27272A] text-[#FAFAFA] font-semibold shadow-xs'
-                    : 'text-[#8B94A8] hover:text-[#FAFAFA]'
-                }`}
-              >
-                Preview
-              </button>
+          {/* Row 2: Invoice no., Date, Due date: grid-cols-2 on sm, grid-cols-1 below, all inputs w-full, no wrapped labels */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 py-2 border-t border-border">
+            <div className="w-full">
+              <label htmlFor="invoice-number" className="block text-[13px] font-medium text-muted mb-1 whitespace-nowrap">
+                Invoice no.
+              </label>
+              <div className="w-full">
+                <Input
+                  id="invoice-number"
+                  type="text"
+                  value={invoiceNumber}
+                  placeholder="INV/001"
+                  error={errors.invoiceNumber}
+                  className="w-full"
+                  onChange={e => { setIsDirty(true); setInvoiceNumber(e.target.value); setErrors(p => ({ ...p, invoiceNumber: null })); }}
+                />
+              </div>
+              {errors.invoiceNumber && <p className="mt-1 text-xs text-danger">{errors.invoiceNumber}</p>}
             </div>
 
-            {/* Secondary Action: Save draft */}
-            <button
-              type="button"
-              onClick={() => handleSave('Draft')}
-              disabled={saving}
-              className="h-9 px-3.5 rounded-[10px] text-xs sm:text-sm font-medium border border-[#2B3040] bg-transparent text-[#F2F4F8] hover:bg-[#1F1F23] disabled:opacity-50 cursor-pointer transition-colors"
-            >
-              Save draft
-            </button>
+            <div className="w-full">
+              <label htmlFor="invoice-date" className="block text-[13px] font-medium text-muted mb-1 whitespace-nowrap">
+                Date
+              </label>
+              <div className="w-full">
+                <DateInput
+                  id="invoice-date"
+                  value={invoiceDate}
+                  error={errors.invoiceDate}
+                  className="w-full"
+                  onChange={v => { setIsDirty(true); setInvoiceDate(v); setErrors(p => ({ ...p, invoiceDate: null })); }}
+                />
+              </div>
+              {errors.invoiceDate && <p className="mt-1 text-xs text-danger">{errors.invoiceDate}</p>}
+            </div>
 
-            {/* Primary Action: Save & issue */}
-            <button
-              type="button"
-              onClick={() => handleSave('Issued')}
-              disabled={saving}
-              className="h-9 px-4 rounded-[10px] text-xs sm:text-sm font-semibold bg-[#4F46E5] text-white hover:bg-[#4338CA] disabled:opacity-50 cursor-pointer transition-all shadow-xs"
-            >
-              {saving ? 'Saving...' : 'Save & issue'}
-            </button>
+            <div className="w-full sm:col-span-2 lg:col-span-1">
+              <label htmlFor="due-date" className="block text-[13px] font-medium text-muted mb-1 whitespace-nowrap">
+                Due date <span className="text-xs font-normal text-faint">(optional)</span>
+              </label>
+              <div className="w-full">
+                <DateInput
+                  id="due-date"
+                  value={dueDate}
+                  placeholder="DD/MM/YYYY"
+                  className="w-full"
+                  onChange={v => { setIsDirty(true); setDueDate(v); }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* ── 2. MAIN LAYOUT (Single centered column, max-w 880px) ───────────────── */}
-      <main className="max-w-[880px] mx-auto px-4 sm:px-6 md:px-8 py-6 space-y-4">
+      {/* ══ NOTICES & ERRORS (Reduced vertical gap) ═══════════════════════════ */}
+      <div className="mx-auto max-w-screen-xl px-4 sm:px-6 space-y-2 mt-2.5">
         {errors.global && (
-          <div className="bg-rose-500/15 border border-rose-500/30 text-[#F87171] rounded-xl px-4 py-3 text-xs flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-lg border border-danger bg-surface px-4 py-2.5 text-sm text-danger">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errors.global}</span>
+            {errors.global}
           </div>
         )}
-
-        {/* ── 3. WARNING STRIP (Slim one-line if business profile missing) ─────── */}
-        {(!business?.businessName || !business?.gstin) && (
-          <div className="bg-[#2A2113] border border-[#5A4416] text-[#F5D79A] rounded-xl px-4 py-2.5 flex items-center justify-between text-xs gap-3">
-            <span>Add your business name and GSTIN to show them on invoices.</span>
+        {missingBizInfo && !noticeDismissed && (
+          <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-2 text-sm gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-muted">Add your business name and GSTIN so they appear on invoices.</span>
+              <button
+                type="button"
+                onClick={() => onNavigate('settings')}
+                className="underline font-medium text-accent hover:opacity-80 cursor-pointer"
+              >
+                Open settings
+              </button>
+            </div>
             <button
               type="button"
-              onClick={() => onNavigate('settings')}
-              className="underline font-semibold hover:text-white cursor-pointer shrink-0"
+              onClick={() => setNoticeDismissed(true)}
+              className="text-muted hover:text-text p-1 cursor-pointer shrink-0"
+              aria-label="Dismiss notice"
             >
-              Open settings
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}
+      </div>
 
-        {/* ── VIEW 1: EDITOR MODE ────────────────────────────────────────────── */}
-        {viewMode === 'editor' && (
-          <div className="space-y-4">
-            {/* ── 4. SECTION: INVOICE INFO (compact card, 3 columns) ─────────── */}
-            <section className="bg-[#14161C] border border-[#232733] rounded-2xl p-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Invoice No. */}
-                <div>
-                  <label
-                    htmlFor="invoice-number"
-                    className="block text-[13px] font-medium text-[#C5CBDA] mb-1.5"
-                  >
-                    Invoice no. <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    id="invoice-number"
-                    type="text"
-                    value={invoiceNumber}
-                    onChange={(e) => {
-                      setIsDirty(true);
-                      setInvoiceNumber(e.target.value);
-                      setErrors((prev) => ({ ...prev, invoiceNumber: null }));
-                    }}
-                    placeholder="INV/26-27/001"
-                    className={`w-full h-12 rounded-[10px] bg-[#0F1116] border ${
-                      errors.invoiceNumber ? 'border-rose-500' : 'border-[#2B3040]'
-                    } px-3.5 text-[15px] font-mono text-[#F2F4F8] placeholder-[#8B94A8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5]`}
-                  />
-                  {errors.invoiceNumber && (
-                    <p className="mt-1 text-xs text-[#F87171] flex items-center gap-1 font-medium">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      {errors.invoiceNumber}
-                    </p>
-                  )}
-                </div>
+      {/* ══ SHARED GRID: FORM + SUMMARY (Right edge aligned, no gap-8 overflow) ═ */}
+      <div className="mx-auto max-w-screen-xl px-4 sm:px-6 py-3">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 lg:gap-8 items-start">
 
-                {/* Date */}
-                <div>
-                  <label
-                    htmlFor="invoice-date"
-                    className="block text-[13px] font-medium text-[#C5CBDA] mb-1.5"
-                  >
-                    Date <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    id="invoice-date"
-                    type="date"
-                    value={invoiceDate}
-                    onChange={(e) => {
-                      setIsDirty(true);
-                      setInvoiceDate(e.target.value);
-                      setErrors((prev) => ({ ...prev, invoiceDate: null }));
-                    }}
-                    style={{ colorScheme: 'dark' }}
-                    className={`w-full h-12 rounded-[10px] bg-[#0F1116] border ${
-                      errors.invoiceDate ? 'border-rose-500' : 'border-[#2B3040]'
-                    } px-3.5 text-[15px] text-[#F2F4F8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5]`}
-                  />
-                  {errors.invoiceDate && (
-                    <p className="mt-1 text-xs text-[#F87171] flex items-center gap-1 font-medium">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      {errors.invoiceDate}
-                    </p>
-                  )}
-                </div>
+          {/* ── FORM ON A SINGLE SURFACE ────────────────────────────────────── */}
+          <div className="min-w-0 w-full">
+            {/* The form width container (@container/form) for responsive item rows */}
+            <div className="@container/form bg-surface rounded-xl border border-border p-4 sm:p-6 space-y-8">
 
-                {/* Due Date */}
-                <div>
-                  <label
-                    htmlFor="due-date"
-                    className="block text-[13px] font-medium text-[#C5CBDA] mb-1.5"
-                  >
-                    Due date <span className="text-[#8B94A8] font-normal text-xs">(optional)</span>
-                  </label>
-                  <input
-                    id="due-date"
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => {
-                      setIsDirty(true);
-                      setDueDate(e.target.value);
-                    }}
-                    style={{ colorScheme: 'dark' }}
-                    placeholder="Immediate"
-                    className="w-full h-12 rounded-[10px] bg-[#0F1116] border border-[#2B3040] px-3.5 text-[15px] text-[#F2F4F8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5]"
-                  />
-                  <p className="text-[11px] text-[#8B94A8] mt-1">Empty means "Immediate"</p>
-                </div>
-              </div>
-            </section>
+              {/* 1. CUSTOMER SECTION */}
+              <div className="space-y-4">
+                <SectionHeading>Customer</SectionHeading>
 
-            {/* ── 5. SECTION: CUSTOMER (card with heading "Customer") ─────────── */}
-            <section className="bg-[#14161C] border border-[#232733] rounded-2xl p-6 space-y-4">
-              <h2 className="text-base font-semibold text-[#F2F4F8] tracking-tight">Customer</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Name */}
+                  <Field label="Name" htmlFor="customer-name" error={errors.customerName}>
+                    <CustomerCombobox
+                      id="customer-name"
+                      value={customerData.name}
+                      onChange={handleCustomerNameChange}
+                      onSelectCustomer={handleSelectCustomer}
+                      customers={customers}
+                      error={Boolean(errors.customerName)}
+                      onQuickAdd={handleQuickAddCustomer}
+                    />
+                  </Field>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Customer Name Combobox */}
-                <div>
-                  <label
-                    htmlFor="customer-name"
-                    className="block text-[13px] font-medium text-[#C5CBDA] mb-1.5"
-                  >
-                    Name <span className="text-rose-400">*</span>
-                  </label>
-                  <CustomerCombobox
-                    id="customer-name"
-                    value={customerData.name}
-                    onChange={handleCustomerNameChange}
-                    onSelectCustomer={handleSelectCustomer}
-                    customers={customers}
-                    error={Boolean(errors.customerName)}
-                  />
-                  {errors.customerName && (
-                    <p className="mt-1 text-xs text-[#F87171] flex items-center gap-1 font-medium">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      {errors.customerName}
-                    </p>
-                  )}
-                </div>
-
-                {/* Place of Supply (State select) */}
-                <div>
-                  <label
+                  {/* Place of supply: dimmed placeholder color until state chosen; hint only after chosen */}
+                  <Field
+                    label="Place of supply"
                     htmlFor="place-of-supply"
-                    className="block text-[13px] font-medium text-[#C5CBDA] mb-1.5"
+                    error={errors.placeOfSupply}
+                    helper={placeOfSupplyHint}
                   >
-                    Place of supply <span className="text-rose-400">*</span>
-                  </label>
-                  <select
-                    id="place-of-supply"
-                    value={effectivePlaceOfSupply}
-                    onChange={(e) => {
-                      setIsDirty(true);
-                      setPlaceOfSupply(e.target.value);
-                      setCustomerData((prev) => ({ ...prev, state: e.target.value }));
-                      setErrors((prev) => ({ ...prev, placeOfSupply: null }));
-                    }}
-                    className={`w-full h-12 rounded-[10px] bg-[#0F1116] border ${
-                      errors.placeOfSupply ? 'border-rose-500' : 'border-[#2B3040]'
-                    } px-3.5 text-[15px] text-[#F2F4F8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5] cursor-pointer`}
-                  >
-                    <option value="" className="bg-[#14161C] text-[#8B94A8]">
-                      -- Select State --
-                    </option>
-                    {INDIAN_STATES.map((s) => (
-                      <option key={s.code} value={s.name} className="bg-[#14161C] text-[#F2F4F8]">
-                        {s.code} - {s.name}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.placeOfSupply ? (
-                    <p className="mt-1 text-xs text-[#F87171] flex items-center gap-1 font-medium">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      {errors.placeOfSupply}
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-[#8B94A8] mt-1">
-                      {isInterState ? 'Inter-State → IGST' : 'Intra-State → CGST + SGST'}
-                    </p>
-                  )}
-                </div>
+                    <Select
+                      id="place-of-supply"
+                      value={placeOfSupply}
+                      className={!placeOfSupply ? 'text-faint' : 'text-text'}
+                      error={Boolean(errors.placeOfSupply)}
+                      onChange={e => {
+                        setIsDirty(true);
+                        setPlaceOfSupply(e.target.value);
+                        setCustomerData(p => ({ ...p, state: e.target.value }));
+                        setErrors(p => ({ ...p, placeOfSupply: null }));
+                      }}
+                    >
+                      <option value="" className="text-faint">Select state</option>
+                      {INDIAN_STATES.map(s => (
+                        <option key={s.code} value={s.name} className="text-text">{s.code} — {s.name}</option>
+                      ))}
+                    </Select>
+                  </Field>
 
-                {/* GSTIN */}
-                <div>
-                  <label
+                  {/* GSTIN (optional) */}
+                  <Field
+                    label="GSTIN"
                     htmlFor="customer-gstin"
-                    className="block text-[13px] font-medium text-[#C5CBDA] mb-1.5"
+                    optional
+                    error={errors.gstin}
+                    helper={!errors.gstin && !customerData.gstin ? 'Skip for B2C consumer invoices' : undefined}
                   >
-                    GSTIN <span className="text-[#8B94A8] font-normal text-xs">(optional)</span>
-                  </label>
-                  <input
-                    id="customer-gstin"
-                    type="text"
-                    maxLength={15}
-                    value={customerData.gstin}
-                    onChange={(e) => {
-                      setIsDirty(true);
-                      setCustomerData({ ...customerData, gstin: e.target.value.toUpperCase() });
-                      setErrors((prev) => ({ ...prev, gstin: null }));
-                    }}
-                    placeholder="e.g. 27AAAAA0000A1Z5"
-                    className={`w-full h-12 rounded-[10px] bg-[#0F1116] border ${
-                      errors.gstin ? 'border-rose-500' : 'border-[#2B3040]'
-                    } px-3.5 text-[15px] font-mono uppercase text-[#F2F4F8] placeholder-[#8B94A8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5]`}
-                  />
-                  {errors.gstin ? (
-                    <p className="mt-1 text-xs text-[#F87171] flex items-center gap-1 font-medium">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      {errors.gstin}
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-[#8B94A8] mt-1">Skip for B2C consumer invoices</p>
-                  )}
+                    <Input
+                      id="customer-gstin"
+                      type="text"
+                      maxLength={15}
+                      value={customerData.gstin}
+                      placeholder="27AAAAA0000A1Z5"
+                      error={errors.gstin}
+                      onChange={e => {
+                        setIsDirty(true);
+                        setCustomerData(p => ({ ...p, gstin: e.target.value.toUpperCase() }));
+                        setErrors(p => ({ ...p, gstin: null }));
+                      }}
+                    />
+                  </Field>
+
+                  {/* Address (optional) */}
+                  <Field label="Address" htmlFor="customer-address" optional>
+                    <Textarea
+                      id="customer-address"
+                      rows={2}
+                      value={customerData.address}
+                      placeholder="Street, City, PIN"
+                      onChange={e => { setIsDirty(true); setCustomerData(p => ({ ...p, address: e.target.value })); }}
+                    />
+                  </Field>
                 </div>
 
-                {/* Address */}
+                {/* Collapsible contact details */}
                 <div>
-                  <label
-                    htmlFor="customer-address"
-                    className="block text-[13px] font-medium text-[#C5CBDA] mb-1.5"
+                  <button
+                    type="button"
+                    onClick={() => setShowContactDetails(p => !p)}
+                    className="text-xs font-medium text-accent hover:underline cursor-pointer"
                   >
-                    Address <span className="text-[#8B94A8] font-normal text-xs">(optional)</span>
-                  </label>
-                  <textarea
-                    id="customer-address"
-                    rows={2}
-                    value={customerData.address}
-                    onChange={(e) => {
-                      setIsDirty(true);
-                      setCustomerData({ ...customerData, address: e.target.value });
-                    }}
-                    placeholder="Street, City, PIN"
-                    className="w-full min-h-[48px] rounded-[10px] bg-[#0F1116] border border-[#2B3040] py-3 px-3.5 text-[15px] text-[#F2F4F8] placeholder-[#8B94A8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5] resize-y"
-                  />
+                    {showContactDetails ? '— Hide contact details' : '+ Add email or phone'}
+                  </button>
+
+                  {showContactDetails && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-border">
+                      <Field label="Email" htmlFor="customer-email" optional>
+                        <Input
+                          id="customer-email"
+                          type="email"
+                          value={customerData.email || ''}
+                          placeholder="billing@customer.com"
+                          onChange={e => { setIsDirty(true); setCustomerData(p => ({ ...p, email: e.target.value })); }}
+                        />
+                      </Field>
+                      <Field label="Phone" htmlFor="customer-phone" optional>
+                        <Input
+                          id="customer-phone"
+                          type="tel"
+                          value={customerData.phone || ''}
+                          placeholder="+91 98765 43210"
+                          onChange={e => { setIsDirty(true); setCustomerData(p => ({ ...p, phone: e.target.value })); }}
+                        />
+                      </Field>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Collapsed disclosure for Email or Phone */}
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowContactDetails(!showContactDetails)}
-                  className="text-xs text-[#818CF8] hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
-                >
-                  {showContactDetails ? '– Hide email and phone' : '+ Add email or phone'}
-                </button>
+              {/* 1px divider */}
+              <Divider />
 
-                {showContactDetails && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 pt-3 border-t border-[#232733]">
-                    <div>
-                      <label
-                        htmlFor="customer-email"
-                        className="block text-[13px] font-medium text-[#C5CBDA] mb-1.5"
-                      >
-                        Email
-                      </label>
-                      <input
-                        id="customer-email"
-                        type="email"
-                        value={customerData.email || ''}
-                        onChange={(e) => {
-                          setIsDirty(true);
-                          setCustomerData({ ...customerData, email: e.target.value });
-                        }}
-                        placeholder="billing@customer.com"
-                        className="w-full h-12 rounded-[10px] bg-[#0F1116] border border-[#2B3040] px-3.5 text-[15px] text-[#F2F4F8] placeholder-[#8B94A8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5]"
-                      />
-                    </div>
-                    <div>
-                      <label
-                        htmlFor="customer-phone"
-                        className="block text-[13px] font-medium text-[#C5CBDA] mb-1.5"
-                      >
-                        Phone
-                      </label>
-                      <input
-                        id="customer-phone"
-                        type="tel"
-                        value={customerData.phone || ''}
-                        onChange={(e) => {
-                          setIsDirty(true);
-                          setCustomerData({ ...customerData, phone: e.target.value });
-                        }}
-                        placeholder="+91 98765 43210"
-                        className="w-full h-12 rounded-[10px] bg-[#0F1116] border border-[#2B3040] px-3.5 text-[15px] text-[#F2F4F8] placeholder-[#8B94A8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5]"
-                      />
-                    </div>
+              {/* 2. ITEMS SECTION */}
+              <div className="space-y-4">
+                <SectionHeading
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => setShowProductPicker(true)}
+                      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-surface hover:bg-border text-xs font-medium text-text transition-colors cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-accent" />
+                      <span>Pick from catalog</span>
+                    </button>
+                  }
+                >
+                  Items
+                </SectionHeading>
+
+                {errors.items && (
+                  <div className="flex items-center gap-2 rounded-lg border border-danger bg-bg px-3 py-2 text-xs text-danger">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {errors.items}
                   </div>
                 )}
-              </div>
-            </section>
 
-            {/* ── 6. SECTION: ITEMS (card with heading "Items") ───────────────── */}
-            <section className="bg-[#14161C] border border-[#232733] rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-[#F2F4F8] tracking-tight">Items</h2>
+                {/* Desktop column header row (aligned flush with Items heading, no extra left indent) */}
+                <ItemsHeader />
+
+                {/* Rows: compact single line on desktop, stacked on mobile */}
+                <div className="space-y-1">
+                  {items.map((item, idx) => (
+                    <ItemRow
+                      key={idx}
+                      item={item}
+                      idx={idx}
+                      totalRows={items.length}
+                      errors={errors}
+                      onChange={handleItemChange}
+                      onRemove={handleRemoveItem}
+                    />
+                  ))}
+                </div>
+
+                {/* Full-width dashed Add item button directly under last row */}
                 <button
                   type="button"
-                  onClick={() => setShowProductPicker(true)}
-                  className="text-xs text-[#818CF8] hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
+                  onClick={handleAddItem}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg border border-dashed border-border text-sm font-medium text-muted hover:text-text hover:border-accent transition-colors cursor-pointer"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Pick from catalog
+                  <Plus className="w-4 h-4" /> Add item
                 </button>
               </div>
 
-              {errors.items && (
-                <div className="bg-rose-500/15 border border-rose-500/30 text-[#F87171] rounded-xl px-4 py-2 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{errors.items}</span>
-                </div>
-              )}
+              {/* 1px divider */}
+              <Divider />
 
-              {/* Items Table container: horizontal scroll on narrow screens */}
-              <div className="overflow-x-auto -mx-2 px-2">
-                <div className="min-w-[680px] space-y-3">
-                  {/* Column Header Row */}
-                  <div className="grid grid-cols-[3fr_0.7fr_1.1fr_1fr_1.1fr_36px] gap-3 px-1 text-[13px] font-medium text-[#C5CBDA]">
-                    <div>
-                      Description <span className="text-rose-400">*</span>
-                    </div>
-                    <div className="text-right">
-                      Qty <span className="text-rose-400">*</span>
-                    </div>
-                    <div className="text-right">
-                      Rate (₹) <span className="text-rose-400">*</span>
-                    </div>
-                    <div>GST</div>
-                    <div className="text-right">Amount (₹)</div>
-                    <div></div>
-                  </div>
-
-                  {/* Rows */}
-                  {items.map((item, idx) => {
-                    const rowAmount = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
-                    const descError = errors[`item_${idx}_description`];
-                    const qtyError = errors[`item_${idx}_quantity`];
-                    const rateError = errors[`item_${idx}_rate`];
-
-                    return (
-                      <div
-                        key={idx}
-                        className="grid grid-cols-[3fr_0.7fr_1.1fr_1fr_1.1fr_36px] gap-3 items-start p-2 rounded-xl bg-[#0F1116]/40 border border-[#232733]"
-                      >
-                        {/* Description + HSN/SAC */}
-                        <div>
-                          <textarea
-                            id={`item_${idx}_description`}
-                            ref={(el) => (itemDescriptionRefs.current[idx] = el)}
-                            rows={2}
-                            placeholder="What are you billing for?"
-                            value={item.description || ''}
-                            onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
-                            className={`w-full min-h-[48px] rounded-[10px] bg-[#0F1116] border ${
-                              descError ? 'border-rose-500' : 'border-[#2B3040]'
-                            } py-2.5 px-3 text-[14px] text-[#F2F4F8] placeholder-[#8B94A8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5] resize-y`}
-                          />
-                          {descError && (
-                            <p className="mt-1 text-[11px] text-[#F87171] flex items-center gap-1 font-medium">
-                              <AlertCircle className="w-3 h-3 shrink-0" />
-                              {descError}
-                            </p>
-                          )}
-                          <input
-                            type="text"
-                            placeholder="HSN/SAC (optional)"
-                            value={item.hsnSac || ''}
-                            onChange={(e) => handleItemChange(idx, 'hsnSac', e.target.value)}
-                            className="mt-1.5 h-8 w-full rounded-[8px] bg-[#0F1116] border border-[#2B3040] px-2.5 text-xs font-mono text-[#F2F4F8] placeholder-[#8B94A8] focus:outline-none focus:ring-1 focus:ring-[#4F46E5]"
-                          />
-                        </div>
-
-                        {/* Qty */}
-                        <div>
-                          <input
-                            id={`item_${idx}_quantity`}
-                            type="number"
-                            min="0.01"
-                            step="any"
-                            value={item.quantity ?? 1}
-                            onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                            className={`h-12 w-full rounded-[10px] bg-[#0F1116] border ${
-                              qtyError ? 'border-rose-500' : 'border-[#2B3040]'
-                            } px-2.5 text-[14px] text-right font-medium tabular-nums text-[#F2F4F8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5]`}
-                          />
-                          {qtyError && (
-                            <p className="mt-1 text-[11px] text-[#F87171] text-right font-medium">
-                              {qtyError}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Rate */}
-                        <div>
-                          <input
-                            id={`item_${idx}_rate`}
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={item.rate ?? 0}
-                            onChange={(e) => handleItemChange(idx, 'rate', e.target.value)}
-                            className={`h-12 w-full rounded-[10px] bg-[#0F1116] border ${
-                              rateError ? 'border-rose-500' : 'border-[#2B3040]'
-                            } px-2.5 text-[14px] text-right font-medium tabular-nums text-[#F2F4F8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5]`}
-                          />
-                          {rateError && (
-                            <p className="mt-1 text-[11px] text-[#F87171] text-right font-medium">
-                              {rateError}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* GST Rate */}
-                        <div>
-                          <select
-                            value={item.gstRate ?? 18}
-                            onChange={(e) => handleItemChange(idx, 'gstRate', Number(e.target.value))}
-                            className="h-12 w-full rounded-[10px] bg-[#0F1116] border border-[#2B3040] px-2 text-[14px] font-medium text-[#F2F4F8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5] cursor-pointer"
-                          >
-                            {GST_RATES.map((r) => (
-                              <option key={r.value} value={r.value} className="bg-[#14161C] text-[#F2F4F8]">
-                                {r.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Amount (read-only, right aligned) */}
-                        <div className="h-12 flex items-center justify-end px-2 text-[14px] font-semibold tabular-nums text-[#F2F4F8]">
-                          {formatCurrency(rowAmount)}
-                        </div>
-
-                        {/* Remove item button */}
-                        <div className="h-12 flex items-center justify-center">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(idx)}
-                            disabled={items.length <= 1}
-                            aria-label="Remove item"
-                            className="p-2 rounded-lg text-[#8B94A8] hover:text-rose-400 hover:bg-rose-500/10 disabled:opacity-20 disabled:pointer-events-none transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+              {/* 3. NOTE SECTION (heading only, no duplicate inner label; optional as placeholder hint) */}
+              <div className="space-y-4">
+                <SectionHeading>Note</SectionHeading>
+                <Textarea
+                  id="invoice-note"
+                  rows={2}
+                  value={notes}
+                  placeholder="Thank you for your business! (optional)"
+                  onChange={e => { setIsDirty(true); setNotes(e.target.value); }}
+                />
               </div>
 
-              {/* Dashed "+ Add item" Button */}
-              <button
-                type="button"
-                onClick={handleAddItem}
-                className="w-full py-3 border border-dashed border-[#2B3040] hover:border-[#4F46E5] rounded-[10px] bg-[#0F1116]/40 hover:bg-[#0F1116] text-[#818CF8] text-xs sm:text-sm font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add item</span>
-              </button>
-            </section>
-
-            {/* ── 7. SECTION: NOTE ────────────────────────────────────────────── */}
-            <section className="bg-[#14161C] border border-[#232733] rounded-2xl p-6 space-y-2">
-              <label
-                htmlFor="invoice-note"
-                className="block text-base font-semibold text-[#F2F4F8] tracking-tight"
-              >
-                Note <span className="text-[#8B94A8] font-normal text-xs">(optional)</span>
-              </label>
-              <textarea
-                id="invoice-note"
-                rows={2}
-                value={notes}
-                onChange={(e) => {
-                  setIsDirty(true);
-                  setNotes(e.target.value);
-                }}
-                placeholder="Thank you for your business!"
-                className="w-full min-h-[48px] rounded-[10px] bg-[#0F1116] border border-[#2B3040] py-3 px-3.5 text-[15px] text-[#F2F4F8] placeholder-[#8B94A8] focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-[#4F46E5] resize-y"
-              />
-            </section>
-          </div>
-        )}
-
-        {/* ── 8. VIEW 2: PREVIEW MODE (toggle → Preview) ───────────────────────── */}
-        {viewMode === 'preview' && (
-          <div className="max-w-[820px] mx-auto space-y-4">
-            {/* Top Preview Toolbar with Print and Download */}
-            <div className="flex items-center justify-between px-4 py-2 bg-[#14161C] border border-[#232733] rounded-xl no-print">
-              <span className="text-xs text-[#8B94A8] font-medium">
-                Showing invoice document with real-time tax breakdown
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="px-3 py-1.5 rounded-[8px] border border-[#2B3040] bg-[#0F1116] hover:bg-[#1F1F23] text-[#F2F4F8] text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-colors"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Print</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadPdf}
-                  className="px-3 py-1.5 rounded-[8px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download PDF</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Clean White Sheet Invoice Document */}
-            <div className="bg-white text-slate-800 rounded-2xl shadow-2xl p-6 sm:p-10 border border-slate-200 font-sans text-xs space-y-6">
-              {/* Header Ribbon: Rule 46 Title */}
-              <div className="flex items-start justify-between pb-4 border-b border-slate-200">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-7 h-7 rounded-lg bg-slate-900 text-white font-bold flex items-center justify-center text-xs">
-                      ₹
-                    </span>
-                    <h2 className="text-base font-bold text-slate-900 uppercase tracking-wider font-heading">
-                      TAX INVOICE
-                    </h2>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Original for Recipient · Rule 46 of CGST Rules
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
-                    {status || 'Draft'}
-                  </span>
-                  <div className="text-sm font-mono font-bold text-slate-900 mt-1">
-                    {invoiceNumber || 'INV-DRAFT'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Two Column Grid: FROM (Supplier) & BILL TO (Customer) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-[11px]">
-                {/* FROM */}
-                <div className="space-y-1 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    FROM (Supplier)
-                  </span>
-                  <div className="font-bold text-slate-900 text-xs">
-                    {business?.businessName || 'Your Business Name'}
-                  </div>
-                  {business?.gstin ? (
-                    <div className="font-mono text-slate-700">
-                      <span className="text-slate-400">GSTIN: </span>{business.gstin}
-                    </div>
-                  ) : (
-                    <div className="text-amber-600 font-medium text-[10px]">GSTIN not added</div>
-                  )}
-                  {business?.address && (
-                    <div className="text-slate-600 whitespace-pre-line">{business.address}</div>
-                  )}
-                  {supplierState && (
-                    <div className="text-slate-600">
-                      <span className="text-slate-400">State: </span>{supplierState}
-                    </div>
-                  )}
-                  {business?.email && <div className="text-slate-500">{business.email}</div>}
-                  {business?.phone && <div className="text-slate-500">{business.phone}</div>}
-                </div>
-
-                {/* BILL TO */}
-                <div className="space-y-1 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    BILL TO (Customer)
-                  </span>
-                  <div className="font-bold text-slate-900 text-xs">
-                    {customerData.name || 'Customer / Client Name'}
-                  </div>
-                  {customerData.gstin ? (
-                    <div className="font-mono text-slate-700">
-                      <span className="text-slate-400">GSTIN: </span>{customerData.gstin}
-                    </div>
-                  ) : (
-                    <div className="text-slate-400 text-[10px]">Unregistered / Consumer (B2C)</div>
-                  )}
-                  {customerData.address && (
-                    <div className="text-slate-600 whitespace-pre-line">{customerData.address}</div>
-                  )}
-                  <div className="text-slate-600">
-                    <span className="text-slate-400">Place of supply: </span>
-                    <span className="font-semibold text-slate-800">
-                      {customerState || 'Not selected'}
-                    </span>
-                  </div>
-                  {customerData.email && <div className="text-slate-500">{customerData.email}</div>}
-                  {customerData.phone && <div className="text-slate-500">{customerData.phone}</div>}
-                </div>
-              </div>
-
-              {/* Invoice Meta Strip */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px]">
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Date:</span>
-                  <span className="font-semibold text-slate-900">
-                    {invoiceDate ? formatDate(invoiceDate) : 'Today'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Due Date:</span>
-                  <span className="font-semibold text-slate-900">
-                    {dueDate ? formatDate(dueDate) : 'Immediate'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Tax Type:</span>
-                  <span className="font-semibold text-indigo-700">
-                    {isInterState ? 'Inter-State (IGST)' : 'Intra-State (CGST + SGST)'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Items Table */}
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-left text-[11px] border-collapse min-w-[560px]">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold text-[10px] uppercase">
-                      <th className="py-2.5 px-3 w-8">#</th>
-                      <th className="py-2.5 px-3">Description</th>
-                      <th className="py-2.5 px-2 font-mono">HSN/SAC</th>
-                      <th className="py-2.5 px-2 text-right">Qty</th>
-                      <th className="py-2.5 px-2 text-right">Rate (₹)</th>
-                      <th className="py-2.5 px-2 text-right">GST</th>
-                      <th className="py-2.5 px-3 text-right">Total (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {items.map((it, idx) => {
-                      const qty = parseFloat(it.quantity) || 1;
-                      const rate = parseFloat(it.rate) || 0;
-                      const calc = calculateItemTotal(it, taxType);
-
-                      return (
-                        <tr key={idx} className="align-top">
-                          <td className="py-2.5 px-3 text-slate-400 text-center">{idx + 1}</td>
-                          <td className="py-2.5 px-3">
-                            <div className="font-medium text-slate-900 whitespace-pre-line">
-                              {it.description || 'Untitled Item'}
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-2 font-mono text-slate-500">{it.hsnSac || '—'}</td>
-                          <td className="py-2.5 px-2 text-right font-medium text-slate-700 tabular-nums">
-                            {qty}
-                          </td>
-                          <td className="py-2.5 px-2 text-right font-mono text-slate-700 tabular-nums">
-                            {formatCurrency(rate)}
-                          </td>
-                          <td className="py-2.5 px-2 text-right font-medium text-slate-700">
-                            {it.gstRate || 0}%
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 tabular-nums">
-                            {formatCurrency(calc.totalAmount)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Tax Breakdown & Grand Total Strip */}
-              <div className="flex flex-col sm:flex-row justify-between gap-6 pt-2">
-                {/* Notes & Bank Details */}
-                <div className="sm:max-w-xs space-y-3 text-[11px] text-slate-600">
-                  {bankDetails.accountNumber && (
-                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[10px] space-y-0.5">
-                      <span className="font-bold text-slate-700 uppercase tracking-wider block">
-                        Bank Details
-                      </span>
-                      <div>
-                        <span className="text-slate-400">Bank: </span>
-                        {bankDetails.bankName}
-                      </div>
-                      <div>
-                        <span className="text-slate-400">A/C: </span>
-                        <span className="font-mono">{bankDetails.accountNumber}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400">IFSC: </span>
-                        <span className="font-mono">{bankDetails.ifscCode}</span>
-                      </div>
-                      {bankDetails.upiId && (
-                        <div>
-                          <span className="text-slate-400">UPI: </span>
-                          {bankDetails.upiId}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {notes && (
-                    <div>
-                      <span className="font-bold text-slate-700 text-[10px] uppercase">Notes:</span>
-                      <p className="text-slate-600 mt-0.5 whitespace-pre-line">{notes}</p>
-                    </div>
-                  )}
-
-                  {terms && (
-                    <div>
-                      <span className="font-bold text-slate-700 text-[10px] uppercase">Terms:</span>
-                      <p className="text-slate-600 mt-0.5 whitespace-pre-line">{terms}</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Calculation Totals */}
-                <div className="w-full sm:max-w-xs space-y-1.5 text-xs text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <div className="flex justify-between">
-                    <span>Taxable turnover</span>
-                    <span className="font-mono text-slate-900 font-medium tabular-nums">
-                      {formatCurrency(invoiceCalculation.taxableAmount || 0)}
-                    </span>
-                  </div>
-
-                  {!isInterState ? (
-                    <>
-                      <div className="flex justify-between">
-                        <span>CGST</span>
-                        <span className="font-mono text-slate-900 tabular-nums">
-                          {formatCurrency(invoiceCalculation.cgst || 0)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>SGST</span>
-                        <span className="font-mono text-slate-900 tabular-nums">
-                          {formatCurrency(invoiceCalculation.sgst || 0)}
-                        </span>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex justify-between">
-                      <span>IGST</span>
-                      <span className="font-mono text-indigo-700 font-medium tabular-nums">
-                        {formatCurrency(invoiceCalculation.igst || 0)}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="flex justify-between pt-1 border-t border-slate-200 font-medium">
-                    <span>Total GST liability</span>
-                    <span className="font-mono text-slate-900 tabular-nums">
-                      {formatCurrency(invoiceCalculation.totalTax || 0)}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between items-baseline pt-2 border-t border-slate-300">
-                    <span className="font-bold text-slate-950 font-heading">Total amount</span>
-                    <span className="font-mono text-lg font-bold text-slate-950 tabular-nums">
-                      {formatCurrency(invoiceCalculation.netTotal || invoiceCalculation.grandTotal || 0)}
-                    </span>
-                  </div>
-
-                  <div className="pt-2 text-[10px] text-slate-500 border-t border-slate-200 capitalize">
-                    {numberToWords(invoiceCalculation.netTotal || invoiceCalculation.grandTotal || 0)}
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
-        )}
-      </main>
 
-      {/* ── Product Picker Modal (if chosen to pick from catalog) ──────────────── */}
-      <ProductPickerModal
-        isOpen={showProductPicker}
-        onClose={() => setShowProductPicker(false)}
-        onSelectProduct={handleSelectProduct}
-        onAddNewProduct={() => {
-          setShowProductPicker(false);
-          onNavigate('products');
-        }}
+          {/* ── SUMMARY COLUMN (360px in grid, no extra margin or max-width) ── */}
+          <aside className="w-full lg:sticky lg:top-24 space-y-4">
+            <TotalsPanel
+              calc={calc}
+              isInterState={isInterState}
+              isInvoiceEmpty={isInvoiceEmpty}
+              onPrint={() => window.print()}
+              onDownloadPdf={handleDownloadPdf}
+              onFullPreview={() => setShowPreviewModal(true)}
+            />
+          </aside>
+
+        </div>
+      </div>
+
+      {/* ══ MOBILE BOTTOM BAR (HIDDEN WHEN MAIN >= 1000PX) ═══════════════════ */}
+      <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-surface border-t border-border px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] flex items-center justify-between gap-3 shadow-lg">
+        <div>
+          <span className="text-xs text-muted block">Grand total</span>
+          <span className="text-base font-semibold text-accent tabular-nums">
+            {formatCurrency(calc.grandTotal ?? 0)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setShowPreviewModal(true)}>
+            <Eye className="w-3.5 h-3.5" /> Preview
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => handleSave('Issued')} disabled={saving}>
+            {saving ? 'Saving…' : 'Issue'}
+          </Button>
+        </div>
+      </div>
+
+      {/* ══ PREVIEW MODAL ═════════════════════════════════════════════════════ */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-bg/80 backdrop-blur-sm">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl">
+            <PreviewSheet
+              payload={buildPayload()}
+              calc={calc}
+              onClose={() => setShowPreviewModal(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ══ PRODUCT PICKER MODAL ═════════════════════════════════════════════ */}
+      {showProductPicker && (
+        <ProductPickerModal
+          onSelect={prod => { handleSelectProduct(prod); setShowProductPicker(false); }}
+          onClose={() => setShowProductPicker(false)}
+        />
+      )}
+
+      {/* ══ QUICK-ADD CUSTOMER DRAWER ════════════════════════════════════════ */}
+      <CustomerDrawer
+        isOpen={customerDrawerOpen}
+        onClose={() => setCustomerDrawerOpen(false)}
+        onSave={handleSavedQuickCustomer}
+        prefillName={customerDrawerName}
       />
     </div>
   );

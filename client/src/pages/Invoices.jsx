@@ -1,4 +1,19 @@
-import React, { useState, useEffect, useMemo } from 'react';
+/**
+ * Invoices.jsx — GST Tax Invoices List Page
+ *
+ * Design System:
+ *  - Colors: strictly semantic tokens (bg, surface, border, text, muted, faint, accent, danger)
+ *  - Layout: max-w-screen-xl px-4 sm:px-6 py-6 font-sans
+ *  - Header: Invoices (20px/600) + record count (small muted text) + subtitle (14px muted) + Create Invoice button
+ *  - Stat cards: 3 compact cards (p-4), label 13px muted with small dot, value 20px/600 tabular-nums in text-text
+ *  - Filter bar: tabs and search on one row directly on page background
+ *  - Table: 52px rows, 1px dividers, hover highlight, tabular-nums amounts, DD/MM/YYYY dates, kebab menu
+ *  - Empty state: compact 240px, icon in 40px surface box, header button hidden when list empty
+ *  - Loading: 5 skeleton rows
+ *  - Error: inline message with Retry button
+ */
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Plus,
   Search,
@@ -6,21 +21,192 @@ import {
   Edit3,
   Copy,
   Download,
-  Trash2,
+  XCircle,
   FileText,
   X,
-  ArrowUpRight,
-  Filter,
-  AlertCircle
+  AlertCircle,
+  MoreHorizontal
 } from 'lucide-react';
-import { Button } from '../components/ui/Button';
-import { InvoiceStatusBadge } from '../components/ui/Badge';
+
 import { useAuth } from '../context/AuthContext';
 import { invoicesApi } from '../api/invoices.api';
 import { formatCurrency } from '../utils/currency';
-import { formatDate } from '../utils/date';
 import { useDebounce } from '../utils/useDebounce';
 import { useAppNavigate } from '../utils/navigation';
+import { Button } from '../components/invoice/InvoiceEditorUI';
+
+// ── Format Date as DD/MM/YYYY ─────────────────────────────────────────────────
+function formatDDMMYYYY(dateInput) {
+  if (!dateInput) return '—';
+  try {
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) {
+      const parts = String(dateInput).split('-');
+      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      return String(dateInput);
+    }
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return String(dateInput);
+  }
+}
+
+// ── Status Badge ──────────────────────────────────────────────────────────────
+// Small rounded-md badge with a colored dot + text on muted tinted backgrounds
+function StatusBadge({ status }) {
+  const configs = {
+    Paid: {
+      dot: 'bg-emerald-400',
+      badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+    },
+    Issued: {
+      dot: 'bg-indigo-400',
+      badge: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+    },
+    Draft: {
+      dot: 'bg-muted',
+      badge: 'bg-border text-muted border-border'
+    },
+    Cancelled: {
+      dot: 'bg-danger',
+      badge: 'bg-danger/10 text-danger border-danger/20'
+    }
+  };
+
+  const c = configs[status] || configs.Draft;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium border ${c.badge}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} aria-hidden="true" />
+      <span>{status || 'Draft'}</span>
+    </span>
+  );
+}
+
+// ── Kebab (⋯) Actions Menu ────────────────────────────────────────────────────
+function RowKebabMenu({ invoice, onNavigate, onDownloadPDF, onDuplicate, onCancel }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const targetId = invoice._id || invoice.id;
+  const isDraft = invoice.status === 'Draft';
+  const isCancelled = invoice.status === 'Cancelled';
+
+  return (
+    <div ref={menuRef} className="relative inline-block text-left" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-label="Invoice actions"
+        className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-text hover:bg-border transition-colors cursor-pointer"
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 mt-1 w-44 rounded-lg bg-surface border border-border shadow-2xl py-1 z-50 text-xs font-medium"
+        >
+          {/* View Details */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onNavigate('invoice-details', targetId);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-text hover:bg-border transition-colors cursor-pointer text-left"
+          >
+            <Eye className="w-3.5 h-3.5 text-muted" />
+            <span>View</span>
+          </button>
+
+          {/* Edit (Drafts only) */}
+          {isDraft && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onNavigate('edit-invoice', targetId);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-text hover:bg-border transition-colors cursor-pointer text-left"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-muted" />
+              <span>Edit</span>
+            </button>
+          )}
+
+          {/* Download PDF */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onDownloadPDF(invoice);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-text hover:bg-border transition-colors cursor-pointer text-left"
+          >
+            <Download className="w-3.5 h-3.5 text-muted" />
+            <span>Download PDF</span>
+          </button>
+
+          {/* Duplicate */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onDuplicate(invoice);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-text hover:bg-border transition-colors cursor-pointer text-left"
+          >
+            <Copy className="w-3.5 h-3.5 text-muted" />
+            <span>Duplicate</span>
+          </button>
+
+          {/* Cancel */}
+          {!isCancelled && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onCancel(invoice);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-danger hover:bg-danger/10 transition-colors cursor-pointer text-left border-t border-border mt-1 pt-1.5"
+            >
+              <XCircle className="w-3.5 h-3.5 text-danger" />
+              <span>Cancel invoice</span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Main Invoices Page Component
+// ═══════════════════════════════════════════════════════════════════════════════
 
 export function Invoices({ onNavigate: propOnNavigate }) {
   const appNavigate = useAppNavigate();
@@ -33,6 +219,15 @@ export function Invoices({ onNavigate: propOnNavigate }) {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Track counts across statuses when viewing all
+  const [statusCounts, setStatusCounts] = useState({
+    ALL: 0,
+    Paid: 0,
+    Issued: 0,
+    Draft: 0,
+    Cancelled: 0
+  });
 
   useEffect(() => {
     loadInvoices();
@@ -48,6 +243,17 @@ export function Invoices({ onNavigate: propOnNavigate }) {
       const res = await invoicesApi.list(params);
       const list = Array.isArray(res?.data) ? res.data : (res?.data?.invoices || []);
       setInvoices(list);
+
+      // When loading unfiltered list, compute live tab counts
+      if (statusFilter === 'ALL' && !debouncedSearch) {
+        const counts = { ALL: list.length, Paid: 0, Issued: 0, Draft: 0, Cancelled: 0 };
+        list.forEach((inv) => {
+          if (counts[inv.status] !== undefined) {
+            counts[inv.status]++;
+          }
+        });
+        setStatusCounts(counts);
+      }
     } catch (err) {
       console.error('Failed to load invoices:', err);
       setError(err.message || 'Failed to load invoices. Please check your connection.');
@@ -77,14 +283,14 @@ export function Invoices({ onNavigate: propOnNavigate }) {
     }
   };
 
-  const handleDelete = async (invoice) => {
+  const handleCancelInvoice = async (invoice) => {
     const targetId = invoice._id || invoice.id;
-    if (window.confirm(`Are you sure you want to delete invoice ${invoice.invoiceNumber}? This cannot be undone.`)) {
+    if (window.confirm(`Are you sure you want to cancel invoice ${invoice.invoiceNumber}?`)) {
       try {
-        await invoicesApi.delete(targetId);
+        await invoicesApi.update(targetId, { status: 'Cancelled' });
         loadInvoices();
       } catch (err) {
-        alert(err.message || 'Failed to delete invoice');
+        alert(err.message || 'Failed to cancel invoice');
       }
     }
   };
@@ -108,254 +314,337 @@ export function Invoices({ onNavigate: propOnNavigate }) {
     return { total, paid, outstanding, count: invoices.length };
   }, [invoices]);
 
+  // Check if initial list is completely empty (no search & no status filter)
+  const isEntirelyEmpty = !loading && invoices.length === 0 && !search && statusFilter === 'ALL';
+
   return (
-    <div className="space-y-6 animate-fade-in pb-12">
-      {/* ── Top Header ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 font-heading">
-              Invoices
-            </h1>
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
-              {summary.count} {summary.count === 1 ? 'record' : 'records'}
-            </span>
-          </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Manage tax invoices, monitor payment statuses, and download GST-compliant PDFs
-          </p>
-        </div>
+    <div className="w-full bg-bg text-text font-sans">
+      <div className="mx-auto max-w-screen-xl px-4 sm:px-6 py-6 space-y-6 pb-24 lg:pb-12">
 
-        <Button
-          size="sm"
-          onClick={() => onNavigate('create-invoice')}
-          className="text-xs shadow-xs self-start sm:self-auto"
-        >
-          <Plus className="w-3.5 h-3.5 mr-1" />
-          Create Invoice
-        </Button>
-      </div>
+        {/* ── 1. Page Header: Title + Subtitle on one block, icon-only '+' on mobile ── */}
+        <div className="flex items-start sm:items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <h1 className="text-[20px] font-semibold text-text tracking-tight leading-tight">
+                Invoices
+              </h1>
+              <span className="text-xs font-normal text-muted">
+                {summary.count} {summary.count === 1 ? 'record' : 'records'}
+              </span>
+            </div>
+            <p className="text-sm text-muted mt-0.5">
+              Manage tax invoices, monitor payment statuses, and download GST-compliant PDFs
+            </p>
+          </div>
 
-      {error && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            <span>{error}</span>
-          </div>
-          <Button size="sm" variant="outline" onClick={loadInvoices} className="text-xs">
-            Retry
-          </Button>
-        </div>
-      )}
-
-      {/* ── Summary Strip (Glide Cards) ─────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="glide-card p-4">
-          <span className="text-xs font-medium text-slate-500">Total Billed</span>
-          <div className="text-xl font-extrabold text-slate-950 mt-1 tabular-nums font-heading">
-            {formatCurrency(summary.total)}
-          </div>
-        </div>
-        <div className="glide-card p-4">
-          <span className="text-xs font-medium text-emerald-700">Total Settled (Paid)</span>
-          <div className="text-xl font-extrabold text-emerald-950 mt-1 tabular-nums font-heading">
-            {formatCurrency(summary.paid)}
-          </div>
-        </div>
-        <div className="glide-card p-4">
-          <span className="text-xs font-medium text-amber-700">Outstanding Balance</span>
-          <div className="text-xl font-extrabold text-amber-950 mt-1 tabular-nums font-heading">
-            {formatCurrency(summary.outstanding)}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Filter Bar & Search — Glide Segmented Pills ─────────────────────── */}
-      <div className="glide-card p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        {/* Segmented Status Pill Bar */}
-        <div className="inline-flex p-1 bg-slate-100/90 rounded-full border border-slate-200/70 overflow-x-auto self-start">
-          {[
-            { id: 'ALL', label: 'All Invoices' },
-            { id: 'Paid', label: 'Paid' },
-            { id: 'Issued', label: 'Issued' },
-            { id: 'Draft', label: 'Draft' },
-            { id: 'Cancelled', label: 'Cancelled' }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id)}
-              className={`px-3 py-1 text-xs font-semibold rounded-full transition-all duration-150 cursor-pointer whitespace-nowrap ${
-                statusFilter === tab.id
-                  ? 'bg-white text-slate-950 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
-              }`}
+          {!isEntirelyEmpty && (
+            <Button
+              variant="primary"
+              size="md"
+              aria-label="Create Invoice"
+              onClick={() => onNavigate('create-invoice')}
+              className="shrink-0 h-10 w-10 sm:w-auto p-0 sm:px-4 flex items-center justify-center rounded-lg"
             >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Search Bar */}
-        <div className="relative w-full md:w-72">
-          <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search by invoice # or customer..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full text-xs rounded-full border border-slate-200/90 bg-white pl-9 pr-8 py-2 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-900 focus:ring-3 focus:ring-slate-900/5 shadow-2xs"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+              <Plus className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Create Invoice</span>
+            </Button>
           )}
         </div>
-      </div>
 
-      {/* ── Invoices Table ─────────────────────────────────────────────────── */}
-      <div className="glide-card overflow-hidden">
-        {loading ? (
-          <div className="py-16 text-center text-xs text-slate-400">Loading invoices...</div>
-        ) : invoices.length === 0 ? (
-          <div className="py-16 px-4 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
-              <FileText className="w-6 h-6" />
+        {/* ── 2. Error Notice (inline with Retry button) ────────────────────── */}
+        {error && (
+          <div className="flex items-center justify-between rounded-lg border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm gap-3">
+            <div className="flex items-center gap-2 text-danger min-w-0">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span className="truncate">Unable to load invoices. Please check your connection.</span>
             </div>
-            <h3 className="text-base font-bold text-slate-900 font-heading">
-              {search || statusFilter !== 'ALL' ? 'No matching invoices' : 'No invoices yet'}
-            </h3>
-            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              {search || statusFilter !== 'ALL'
-                ? 'Try adjusting your filters or clearing search query.'
-                : 'Get started by creating your first GST-compliant tax invoice.'}
-            </p>
-            {(!search && statusFilter === 'ALL') && (
-              <Button
-                size="sm"
-                onClick={() => onNavigate('create-invoice')}
-                className="mt-4 text-xs"
+            <Button variant="secondary" size="sm" onClick={loadInvoices} className="shrink-0">
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {/* ── 3. Three Compact Stat Cards (1 col below sm, 3 cols from sm) ──── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          {/* Total Billed */}
+          <div className="rounded-xl border border-border bg-surface p-4 space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-accent shrink-0" aria-hidden="true" />
+              <span className="text-[13px] font-medium text-muted">Total billed</span>
+            </div>
+            <div className="text-[20px] font-semibold text-text tabular-nums">
+              {formatCurrency(summary.total)}
+            </div>
+          </div>
+
+          {/* Paid */}
+          <div className="rounded-xl border border-border bg-surface p-4 space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" aria-hidden="true" />
+              <span className="text-[13px] font-medium text-muted">Paid</span>
+            </div>
+            <div className="text-[20px] font-semibold text-text tabular-nums">
+              {formatCurrency(summary.paid)}
+            </div>
+          </div>
+
+          {/* Outstanding */}
+          <div className="rounded-xl border border-border bg-surface p-4 space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" aria-hidden="true" />
+              <span className="text-[13px] font-medium text-muted">Outstanding</span>
+            </div>
+            <div className="text-[20px] font-semibold text-text tabular-nums">
+              {formatCurrency(summary.outstanding)}
+            </div>
+          </div>
+        </div>
+
+        {/* ── 4. Filters & Search (tabs single row overflow-x-auto, search full width below on mobile) ── */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          {/* Segmented Filter Tabs: single row, overflow-x-auto, tabs shrink-0, hide scrollbar */}
+          <div className="w-full md:w-auto overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <div className="inline-flex p-1 bg-surface rounded-lg border border-border min-w-max">
+              {[
+                { id: 'ALL', label: 'All' },
+                { id: 'Paid', label: 'Paid' },
+                { id: 'Issued', label: 'Issued' },
+                { id: 'Draft', label: 'Draft' },
+                { id: 'Cancelled', label: 'Cancelled' }
+              ].map((tab) => {
+                const active = statusFilter === tab.id;
+                const count = statusCounts[tab.id] ?? 0;
+
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setStatusFilter(tab.id)}
+                    className={`h-8 px-3 rounded-md text-xs font-medium cursor-pointer transition-colors whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+                      active
+                        ? 'bg-border text-text font-semibold shadow-xs'
+                        : 'text-muted hover:text-text'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`text-[11px] tabular-nums ${active ? 'text-text' : 'text-faint'}`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Search Bar: full width on its own row under tabs on mobile; 320px on desktop */}
+          <div className="relative w-full md:w-80 shrink-0">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search by invoice # or customer…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-10 w-full rounded-lg border border-border bg-surface pl-9 pr-8 text-sm font-normal text-text placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-text cursor-pointer p-0.5"
               >
-                <Plus className="w-3.5 h-3.5 mr-1" />
-                Create First Invoice
-              </Button>
+                <X className="w-3.5 h-3.5" />
+              </button>
             )}
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs" aria-label="Invoices list">
-              <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th scope="col" className="py-3 px-4">Invoice #</th>
-                  <th scope="col" className="py-3 px-4">Customer</th>
-                  <th scope="col" className="py-3 px-4">Date</th>
-                  <th scope="col" className="py-3 px-4">Tax Type</th>
-                  <th scope="col" className="py-3 px-4">GST Tax</th>
-                  <th scope="col" className="py-3 px-4">Net Total</th>
-                  <th scope="col" className="py-3 px-4">Status</th>
-                  <th scope="col" className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
+        </div>
+
+        {/* ── 5. Invoices Table Container (Single 1px border, rounded-xl) ────── */}
+        <div className="rounded-xl border border-border bg-surface overflow-hidden">
+          {loading ? (
+            /* Skeleton Loading (5 Rows) */
+            <div className="divide-y divide-border">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-[52px] flex items-center px-4 gap-6 animate-pulse">
+                  <div className="h-3.5 bg-border rounded w-28" />
+                  <div className="h-3.5 bg-border rounded w-40" />
+                  <div className="h-3.5 bg-border rounded w-20" />
+                  <div className="h-3.5 bg-border rounded w-20" />
+                  <div className="h-3.5 bg-border rounded w-24 ml-auto" />
+                  <div className="h-5 bg-border rounded-md w-16" />
+                  <div className="h-6 bg-border rounded w-8" />
+                </div>
+              ))}
+            </div>
+          ) : invoices.length === 0 ? (
+            /* Compact Empty State (~240px vertical space, 40px surface box) */
+            <div className="min-h-[240px] flex flex-col items-center justify-center p-6 text-center">
+              <div className="w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center text-muted mb-3">
+                <FileText className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-semibold text-text">
+                {search || statusFilter !== 'ALL' ? 'No matching invoices' : 'No invoices yet'}
+              </h3>
+              <p className="text-xs text-muted mt-1 max-w-sm">
+                {search || statusFilter !== 'ALL'
+                  ? 'Try adjusting your filters or clearing your search query.'
+                  : 'Get started by creating your first GST-compliant tax invoice.'}
+              </p>
+
+              {search || statusFilter !== 'ALL' ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setSearch('');
+                    setStatusFilter('ALL');
+                  }}
+                  className="mt-4"
+                >
+                  Clear filters
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => onNavigate('create-invoice')}
+                  className="mt-4"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create invoice</span>
+                </Button>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Desktop Table View (≥ md) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse" aria-label="Invoices list">
+                  <thead>
+                    <tr className="border-b border-border text-muted font-medium uppercase tracking-wider text-[11px]">
+                      <th scope="col" className="py-3 px-4 font-medium">Invoice no.</th>
+                      <th scope="col" className="py-3 px-4 font-medium">Customer</th>
+                      <th scope="col" className="py-3 px-4 font-medium">Date</th>
+                      <th scope="col" className="py-3 px-4 font-medium">Due date</th>
+                      <th scope="col" className="py-3 px-4 font-medium text-right">Amount</th>
+                      <th scope="col" className="py-3 px-4 font-medium">Status</th>
+                      <th scope="col" className="py-3 px-4 font-medium text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {invoices.map((inv) => {
+                      const targetId = inv._id || inv.id;
+                      const customerName = inv.customer?.name || inv.customerName || 'Walk-in Customer';
+                      const net = Number(inv.netTotal ?? inv.grandTotal) || 0;
+
+                      return (
+                        <tr
+                          key={targetId}
+                          onClick={() => onNavigate('invoice-details', targetId)}
+                          className="h-[52px] hover:bg-bg transition-colors cursor-pointer group"
+                        >
+                          {/* Invoice No. */}
+                          <td className="py-2 px-4 font-medium text-text whitespace-nowrap">
+                            {inv.invoiceNumber || 'INV-DRAFT'}
+                          </td>
+
+                          {/* Customer */}
+                          <td className="py-2 px-4 text-text whitespace-nowrap">
+                            <span className="font-normal truncate max-w-[200px] inline-block align-middle">
+                              {customerName}
+                            </span>
+                          </td>
+
+                          {/* Date DD/MM/YYYY */}
+                          <td className="py-2 px-4 text-muted whitespace-nowrap">
+                            {formatDDMMYYYY(inv.invoiceDate)}
+                          </td>
+
+                          {/* Due Date DD/MM/YYYY */}
+                          <td className="py-2 px-4 text-muted whitespace-nowrap">
+                            {inv.dueDate ? formatDDMMYYYY(inv.dueDate) : 'Immediate'}
+                          </td>
+
+                          {/* Amount (right-aligned, tabular-nums) */}
+                          <td className="py-2 px-4 font-medium text-text tabular-nums text-right whitespace-nowrap">
+                            {formatCurrency(net)}
+                          </td>
+
+                          {/* Status Badge */}
+                          <td className="py-2 px-4 whitespace-nowrap">
+                            <StatusBadge status={inv.status} />
+                          </td>
+
+                          {/* Actions Kebab Menu */}
+                          <td className="py-2 px-4 text-right whitespace-nowrap">
+                            <RowKebabMenu
+                              invoice={inv}
+                              onNavigate={onNavigate}
+                              onDownloadPDF={handleDownloadPDF}
+                              onDuplicate={handleDuplicate}
+                              onCancel={handleCancelInvoice}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Stacked Card View (< md) */}
+              <div className="md:hidden divide-y divide-border">
                 {invoices.map((inv) => {
                   const targetId = inv._id || inv.id;
                   const customerName = inv.customer?.name || inv.customerName || 'Walk-in Customer';
-                  const taxType = inv.taxType === 'INTER' ? 'IGST' : 'CGST+SGST';
                   const net = Number(inv.netTotal ?? inv.grandTotal) || 0;
-                  const tax = Number(inv.totalTax) || 0;
 
                   return (
-                    <tr
+                    <div
                       key={targetId}
-                      className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
                       onClick={() => onNavigate('invoice-details', targetId)}
+                      className="p-4 space-y-2 hover:bg-bg transition-colors cursor-pointer"
                     >
-                      <td className="py-3.5 px-4 font-bold text-slate-900 whitespace-nowrap">
-                        {inv.invoiceNumber || 'INV-DRAFT'}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-[10px] shrink-0">
-                            {customerName.charAt(0).toUpperCase()}
-                          </div>
-                          <span className="font-medium text-slate-800 truncate max-w-[170px]">
-                            {customerName}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap">
-                        {formatDate(inv.invoiceDate)}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          inv.taxType === 'INTER'
-                            ? 'bg-[var(--accent-soft-bg)] text-[var(--accent-soft-text)] border border-[var(--accent)]/30'
-                            : 'bg-[var(--surface-hover)] text-[var(--muted)] border border-[var(--border)]'
-                        }`}>
-                          {taxType}
+                      {/* Top: Invoice No. + Status + Actions */}
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-text text-sm">
+                          {inv.invoiceNumber || 'INV-DRAFT'}
                         </span>
-                      </td>
-                      <td className="py-3.5 px-4 font-medium text-slate-600 tabular-nums whitespace-nowrap">
-                        {formatCurrency(tax)}
-                      </td>
-                      <td className="py-3.5 px-4 font-bold text-slate-950 tabular-nums whitespace-nowrap">
-                        {formatCurrency(net)}
-                      </td>
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <InvoiceStatusBadge status={inv.status} />
-                      </td>
-                      <td
-                        className="py-3.5 px-4 text-right whitespace-nowrap"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => onNavigate('invoice-details', targetId)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-950 hover:bg-slate-100 transition-colors"
-                            title="View Details"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => onNavigate('edit-invoice', targetId)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-950 hover:bg-slate-100 transition-colors"
-                            title="Edit Invoice"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDownloadPDF(inv)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-950 hover:bg-slate-100 transition-colors"
-                            title="Download PDF"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDuplicate(inv)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-950 hover:bg-slate-100 transition-colors"
-                            title="Duplicate"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(inv)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={inv.status} />
+                          <RowKebabMenu
+                            invoice={inv}
+                            onNavigate={onNavigate}
+                            onDownloadPDF={handleDownloadPDF}
+                            onDuplicate={handleDuplicate}
+                            onCancel={handleCancelInvoice}
+                          />
                         </div>
-                      </td>
-                    </tr>
+                      </div>
+
+                      {/* Customer Name */}
+                      <div className="text-sm font-normal text-muted truncate">
+                        {customerName}
+                      </div>
+
+                      {/* Date & Amount */}
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-border/50">
+                        <span className="text-muted">
+                          {formatDDMMYYYY(inv.invoiceDate)}
+                          {inv.dueDate ? ` · Due ${formatDDMMYYYY(inv.dueDate)}` : ''}
+                        </span>
+                        <span className="text-sm font-semibold text-text tabular-nums text-right">
+                          {formatCurrency(net)}
+                        </span>
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        )}
+              </div>
+            </>
+          )}
+        </div>
+
       </div>
     </div>
   );

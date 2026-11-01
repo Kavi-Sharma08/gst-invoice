@@ -1,4 +1,4 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
 @theme {
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
@@ -22,6 +22,16 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+
+  /* Semantic aliases for the invoice editor */
+  --color-bg:      var(--background);
+  --color-surface: var(--surface);
+  --color-border:  var(--border);
+  --color-text:    var(--foreground);
+  --color-muted:   var(--muted);
+  --color-faint:   var(--faint);
+  --color-accent:  var(--accent);
+  --color-danger:  var(--danger);
 }
 
 :root {
@@ -35,6 +45,7 @@
   --border-subtle:     #1F1F23;
   --foreground:        #FAFAFA;
   --muted:             #A1A1AA;
+  --faint:             #52525B;
   --ring-muted:        #3F3F46;
   --accent:            #4F46E5;
   --accent-text:       #818CF8;
