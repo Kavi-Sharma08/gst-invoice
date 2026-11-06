@@ -1,29 +1,48 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  IndianRupee,
+  Percent,
+  Clock,
+  Users,
+  CalendarClock,
+  FileText,
+  Plus,
+  AlertCircle,
+} from 'lucide-react';
+
 import { useAuth } from '../context/AuthContext';
 import { invoicesApi } from '../api/invoices.api';
 import { customersApi } from '../api/customers.api';
-import { RippleButton } from '../components/ui/RippleButton';
+import { formatCurrency } from '../utils/currency';
+import { PageHeader } from '../components/layout/PageHeader';
+import { Button } from '../components/invoice/InvoiceEditorUI';
 import { RevenueMuiChart } from '../components/dashboard/RevenueMuiChart';
-import '../styles/dashboard.css';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function sum(arr) {
   return (arr || []).reduce((acc, val) => acc + (Number(val) || 0), 0);
 }
 
-function inr(n) {
-  return '₹' + Number(n || 0).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
-}
-
-function k(n) {
+function formatShortK(n) {
   const num = Number(n || 0);
   if (num >= 1e5) return '₹' + (num / 1e5).toFixed(1).replace('.0', '') + 'L';
   if (num >= 1e3) return '₹' + Math.round(num / 1e3) + 'k';
   return '₹' + Math.round(num);
+}
+
+function formatDDMMYYYY(dateInput) {
+  if (!dateInput) return '—';
+  try {
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return String(dateInput);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return String(dateInput);
+  }
 }
 
 function getLast6Months() {
@@ -34,38 +53,83 @@ function getLast6Months() {
     months.push({
       label: d.toLocaleDateString('en-IN', { month: 'short' }),
       year: d.getFullYear(),
-      month: d.getMonth()
+      month: d.getMonth(),
     });
   }
   return months;
 }
 
-/** SVG Trend Sparkline matching the spec */
-function renderSparkline(values, strokeColor) {
-  const arr = values && values.length ? values : [0, 0, 0, 0, 0, 0];
-  const max = Math.max(...arr) || 1;
-  const points = arr
-    .map((v, i) => {
-      const x = (i * 100) / (arr.length - 1);
-      const y = 26 - (v / max) * 22;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(' ');
+function getGstr1Reminder() {
+  const now = new Date();
+  const curMonthName = now.toLocaleDateString('en-IN', { month: 'long' });
+  const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 11);
+  const nextMonthName = nextMonthDate.toLocaleDateString('en-IN', { month: 'short' });
+  return `GSTR-1 for ${curMonthName} is due on 11 ${nextMonthName}`;
+}
+
+function getDueStatus(dueDate) {
+  if (!dueDate) return { label: 'Due', className: 'text-muted' };
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const targetDate = new Date(dueDate);
+  const targetMidnight = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()).getTime();
+
+  const diffMs = targetMidnight - todayMidnight;
+  const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000));
+
+  if (diffDays < 0) {
+    const absDays = Math.abs(diffDays);
+    return {
+      label: `Overdue by ${absDays} ${absDays === 1 ? 'day' : 'days'}`,
+      className: 'text-danger font-medium',
+    };
+  }
+  if (diffDays === 0) {
+    return {
+      label: 'Due today',
+      className: 'text-amber-500 font-medium',
+    };
+  }
+  return {
+    label: `Due in ${diffDays} ${diffDays === 1 ? 'day' : 'days'}`,
+    className: 'text-amber-500 font-medium',
+  };
+}
+
+// Status badge matching Invoices list
+function StatusBadge({ status }) {
+  const configs = {
+    Paid: {
+      dot: 'bg-emerald-400',
+      badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    },
+    Issued: {
+      dot: 'bg-indigo-400',
+      badge: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+    },
+    Draft: {
+      dot: 'bg-muted',
+      badge: 'bg-border text-muted border-border',
+    },
+    Cancelled: {
+      dot: 'bg-danger',
+      badge: 'bg-danger/10 text-danger border-danger/20',
+    },
+  };
+
+  const c = configs[status] || configs.Draft;
 
   return (
-    <svg className="sp" viewBox="0 0 100 28" preserveAspectRatio="none">
-      <polyline
-        points={points}
-        fill="none"
-        stroke={strokeColor}
-        strokeWidth="2"
-        vectorEffect="non-scaling-stroke"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium border ${c.badge}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} aria-hidden="true" />
+      <span>{status || 'Draft'}</span>
+    </span>
   );
 }
+
+const PERIOD_OPTIONS = ['This month', 'Last 6 months', 'FY 2026-27', 'All time'];
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -73,44 +137,45 @@ export function Dashboard() {
 
   // Chart Tab: 'rt' = Revenue & tax, 'gb' = GST breakdown
   const [chartTab, setChartTab] = useState('rt');
-  // Period filter: 'This month' | 'Last 6 months' | 'FY 2026-27' | 'All time'
+  // Period filter
   const [period, setPeriod] = useState('Last 6 months');
-  // Reminded invoices state (changes 'Remind' to 'Sent ✓')
-  const [remindedMap, setRemindedMap] = useState({});
 
-  // Real backend data states
+  // Backend data states
   const [invoices, setInvoices] = useState([]);
   const [customersCount, setCustomersCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    async function loadRealData() {
-      try {
-        setLoading(true);
-        setError(null);
-        const [invRes, custRes] = await Promise.all([
-          invoicesApi.list({ limit: 100 }),
-          customersApi.list({ limit: 100 })
-        ]);
+  const loadRealData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [invRes, custRes] = await Promise.all([
+        invoicesApi.list({ limit: 100 }),
+        customersApi.list({ limit: 100 }),
+      ]);
 
-        const invList = Array.isArray(invRes?.data) ? invRes.data : (invRes?.data?.invoices || []);
-        const custTotal = custRes?.data?.total ?? custRes?.pagination?.total ?? (Array.isArray(custRes?.data) ? custRes.data.length : (custRes?.data?.customers?.length || 0));
+      const invList = Array.isArray(invRes?.data) ? invRes.data : (invRes?.data?.invoices || []);
+      const custTotal =
+        custRes?.data?.total ??
+        custRes?.pagination?.total ??
+        (Array.isArray(custRes?.data) ? custRes.data.length : (custRes?.data?.customers?.length || 0));
 
-        setInvoices(invList);
-        setCustomersCount(custTotal);
-      } catch (err) {
-        console.error('Failed to load dashboard data:', err);
-        setError(err.message || 'Failed to load dashboard data. Please try again.');
-      } finally {
-        setLoading(false);
-      }
+      setInvoices(invList);
+      setCustomersCount(custTotal);
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err);
+      setError(err.message || 'Failed to load dashboard data. Please try again.');
+    } finally {
+      setLoading(false);
     }
+  }, []);
 
+  useEffect(() => {
     if (isAuthenticated) {
       loadRealData();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, loadRealData]);
 
   // 6-month timeline structure
   const last6Months = useMemo(() => getLast6Months(), []);
@@ -139,7 +204,6 @@ export function Dashboard() {
     }
 
     if (period === 'FY 2026-27') {
-      // Indian Financial Year: 1 April 2026 to 31 March 2027
       const startFY = new Date(2026, 3, 1);
       const endFY = new Date(2027, 2, 31, 23, 59, 59);
       return invoices.filter((inv) => {
@@ -171,440 +235,544 @@ export function Dashboard() {
         sgst,
         igst,
         totalTax,
-        cgstSgst: cgst + sgst
+        cgstSgst: cgst + sgst,
       };
     });
   }, [invoices, last6Months]);
 
-  const isEmpty = invoices.length === 0;
+  // Metric totals for filtered period
+  const taxableTurnover = sum(filteredInvoices.map((inv) => inv.taxableAmount || inv.subTotal || 0));
+  const cgstTotal = sum(filteredInvoices.map((inv) => inv.cgst || 0));
+  const sgstTotal = sum(filteredInvoices.map((inv) => inv.sgst || 0));
+  const igstTotal = sum(filteredInvoices.map((inv) => inv.igst || 0));
+  const gstTotal = sum(
+    filteredInvoices.map((inv) => inv.totalTax || (inv.cgst || 0) + (inv.sgst || 0) + (inv.igst || 0))
+  );
 
-  // Real Metric Totals
-  const T = sum(filteredInvoices.map((inv) => inv.taxableAmount || inv.subTotal || 0));
-  const CG = sum(filteredInvoices.map((inv) => inv.cgst || 0));
-  const SG = sum(filteredInvoices.map((inv) => inv.sgst || 0));
-  const IG = sum(filteredInvoices.map((inv) => inv.igst || 0));
-  const X = sum(filteredInvoices.map((inv) => inv.totalTax || (inv.cgst || 0) + (inv.sgst || 0) + (inv.igst || 0)));
+  // Issued unpaid invoices (exclude Draft, Cancelled, Paid)
+  const issuedUnpaidInvoices = useMemo(() => {
+    return filteredInvoices.filter((inv) => inv.status === 'Issued');
+  }, [filteredInvoices]);
 
-  const unpaidRows = filteredInvoices.filter((r) => r.status !== 'Paid');
-  const dueAmount = sum(unpaidRows.map((r) => r.netTotal || r.grandTotal || 0));
+  const dueAmount = sum(issuedUnpaidInvoices.map((r) => r.netTotal || r.grandTotal || 0));
+
+  // Trend ("vs previous period") is only shown when previous period has data AND current revenue > 0
+  const trend = useMemo(() => {
+    if (taxableTurnover <= 0) return null;
+    const now = new Date();
+    let prevInvoices = [];
+
+    if (period === 'This month') {
+      const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const prevMonth = prevMonthDate.getMonth();
+      const prevYear = prevMonthDate.getFullYear();
+      prevInvoices = invoices.filter((inv) => {
+        const d = new Date(inv.invoiceDate || inv.createdAt);
+        return d.getMonth() === prevMonth && d.getFullYear() === prevYear;
+      });
+    } else if (period === 'Last 6 months') {
+      const startPrev = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+      const endPrev = new Date(now.getFullYear(), now.getMonth() - 5, 0, 23, 59, 59);
+      prevInvoices = invoices.filter((inv) => {
+        const d = new Date(inv.invoiceDate || inv.createdAt);
+        return d >= startPrev && d <= endPrev;
+      });
+    } else {
+      return null;
+    }
+
+    const prevRev = sum(prevInvoices.map((inv) => inv.taxableAmount || inv.subTotal || 0));
+    if (prevRev <= 0) return null;
+
+    const diffPct = ((taxableTurnover - prevRev) / prevRev) * 100;
+    return {
+      pct: Math.abs(diffPct).toFixed(1),
+      isPositive: diffPct >= 0,
+      label: period === 'This month' ? 'vs last month' : 'vs previous 6 months',
+    };
+  }, [taxableTurnover, period, invoices]);
 
   // Chart series data
-  const isStk = chartTab === 'gb';
-  const seriesNames = isStk
+  const isGstBreakdown = chartTab === 'gb';
+  const seriesNames = isGstBreakdown
     ? { primary: 'CGST + SGST', secondary: 'IGST' }
     : { primary: 'Taxable sales', secondary: 'GST collected' };
 
-  const primaryData = monthlyStats.map((m) => (isStk ? m.cgstSgst : m.taxable));
-  const secondaryData = monthlyStats.map((m) => (isStk ? m.igst : m.totalTax));
+  const primaryData = monthlyStats.map((m) => (isGstBreakdown ? m.cgstSgst : m.taxable));
+  const secondaryData = monthlyStats.map((m) => (isGstBreakdown ? m.igst : m.totalTax));
+  const isChartEmpty = primaryData.every((v) => v === 0) && secondaryData.every((v) => v === 0);
 
-  const currentVal = primaryData[5] || 0;
-  const prevVal = primaryData[4] || 0;
-  const pctChange = prevVal ? ((currentVal / prevVal - 1) * 100) : 0;
+  // Needs Attention: strictly issued, unpaid invoices that are overdue or due within 7 days, sorted by due date ascending
+  const needsAttentionInvoices = useMemo(() => {
+    const now = new Date();
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const sevenDaysFromNow = todayMidnight + 7 * 24 * 60 * 60 * 1000;
 
-  // Recent invoices table rows
-  const recentTableRows = useMemo(() => {
-    return invoices.slice(0, 5).map((inv) => ({
-      id: inv.invoiceNumber || 'INV-0001',
-      c: inv.customer?.name || 'Customer',
-      d: inv.invoiceDate
-        ? new Date(inv.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
-        : 'Recent',
-      a: inv.netTotal || inv.grandTotal || 0,
-      s: inv.status || 'Paid'
-    }));
+    return invoices
+      .filter((inv) => {
+        if (inv.status !== 'Issued' || !inv.dueDate) return false;
+        const dueTime = new Date(inv.dueDate).getTime();
+        if (isNaN(dueTime)) return false;
+        return dueTime <= sevenDaysFromNow;
+      })
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   }, [invoices]);
 
-  // KPI cards
-  const zeroSeries = [0, 0, 0, 0, 0, 0];
-  const kpis = [
-    {
-      label: 'Net revenue',
-      icon: '₹',
-      value: inr(T),
-      subtext: isEmpty ? (
-        'No invoices yet'
-      ) : (
-        <>
-          <b className="up">▲ 12.4%</b> vs previous 6 months
-        </>
-      ),
-      series: isEmpty ? zeroSeries : primaryData,
-      color: 'var(--muted)'
-    },
-    {
-      label: 'GST collected',
-      icon: '%',
-      value: inr(X),
-      subtext: `CGST ${k(CG)} · SGST ${k(SG)} · IGST ${k(IG)}`,
-      series: isEmpty ? zeroSeries : secondaryData,
-      color: 'var(--muted)'
-    },
-    {
-      label: 'Outstanding',
-      icon: '⏱',
-      value: inr(dueAmount),
-      subtext: isEmpty || unpaidRows.length === 0 ? (
-        <b className="okt">All payments settled</b>
-      ) : (
-        <b className="wt">{unpaidRows.length} invoices unpaid</b>
-      ),
-      series: isEmpty ? zeroSeries : [0, 0, 0, 0, unpaidRows.length, unpaidRows.length],
-      color: 'var(--muted)'
-    },
-    {
-      label: 'Customers',
-      icon: '👥',
-      value: customersCount,
-      subtext: isEmpty ? 'Add your first customer' : `${invoices.length} invoices issued`,
-      series: isEmpty ? zeroSeries : [0, 1, 1, 2, customersCount, customersCount],
-      color: 'var(--muted)'
-    }
-  ];
+  // Recent 5 invoices
+  const recentInvoices = useMemo(() => invoices.slice(0, 5), [invoices]);
 
-  const handleRemindClick = (id) => {
-    setRemindedMap((prev) => ({ ...prev, [id]: true }));
-  };
+  // Check if period has issued invoices (for GSTR-1 ready badge)
+  const hasIssuedInvoices = useMemo(() => {
+    return filteredInvoices.some((inv) => inv.status === 'Issued');
+  }, [filteredInvoices]);
 
-  const checklist = [
-    'Create your workspace',
-    'Add business details and GSTIN',
-    'Add logo and UPI / bank details',
-    'Add your first customer',
-    'Create your first invoice'
-  ];
+  const allTaxZero = cgstTotal === 0 && sgstTotal === 0 && igstTotal === 0;
 
+  // ── Skeleton loading state (5 skeleton rows) ──────────────────────────────
   if (loading) {
     return (
-      <div className="dashboard-main" style={{ opacity: 0.7 }}>
-        <div className="top">
-          <div>
-            <h1>Dashboard</h1>
-            <p className="mu">GST compliance, revenue and payments at a glance.</p>
+      <div className="w-full bg-bg text-text font-sans flex flex-col min-h-full">
+        <div className="mx-auto max-w-screen-xl w-full px-4 sm:px-6 py-6 space-y-4">
+          <PageHeader title="Dashboard" srOnlyTitle />
+
+          {/* Action bar skeleton */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="h-10 w-72 bg-border/60 rounded-lg animate-pulse" />
+            <div className="h-10 w-32 bg-border/60 rounded-lg animate-pulse ml-auto" />
           </div>
-        </div>
-        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--mute)' }}>
-          Loading your business records...
+
+          {/* 4 Stat Cards skeleton */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-border bg-surface p-4 space-y-3 animate-pulse"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="h-3 w-16 bg-border/60 rounded" />
+                  <div className="h-4 w-4 bg-border/60 rounded" />
+                </div>
+                <div className="h-5 w-24 bg-border/60 rounded" />
+                <div className="h-3 w-28 bg-border/60 rounded" />
+              </div>
+            ))}
+          </div>
+
+          {/* 5 Skeleton rows */}
+          <div className="rounded-xl border border-border bg-surface p-4 divide-y divide-border">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                className="py-3.5 flex items-center justify-between gap-4 animate-pulse"
+              >
+                <div className="space-y-1.5 min-w-0">
+                  <div className="h-4 w-36 bg-border/60 rounded" />
+                  <div className="h-3 w-52 bg-border/60 rounded" />
+                </div>
+                <div className="h-4 w-20 bg-border/60 rounded shrink-0" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="dashboard-main">
-      {/* ── Top Header ──────────────────────────────────────────────────────── */}
-      <div className="top">
-        <div>
-          <h1>Dashboard</h1>
-          <p className="mu">GST compliance, revenue and payments at a glance.</p>
-        </div>
-        <div className="acts">
-          <div className="seg" id="per">
-            {['This month', 'Last 6 months', 'FY 2026-27', 'All time'].map((p) => (
-              <button
-                key={p}
-                className={period === p ? 'on' : ''}
-                onClick={() => setPeriod(p)}
-              >
-                {p}
-              </button>
-            ))}
+    <div className="w-full bg-bg text-text font-sans flex flex-col min-h-full">
+      <div className="mx-auto max-w-screen-xl w-full px-4 sm:px-6 py-6 space-y-4 pb-24 lg:pb-12">
+        {/* Semantic h1 + Document title via PageHeader */}
+        <PageHeader title="Dashboard" srOnlyTitle />
+
+        {/* ── Row 1: Period Filter on Left + New Invoice on Right ────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Period Filter (segmented tabs) */}
+          <div className="inline-flex items-center p-1 rounded-lg border border-border bg-surface text-xs overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            {PERIOD_OPTIONS.map((p) => {
+              const active = period === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPeriod(p)}
+                  className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    active
+                      ? 'bg-border/60 text-text font-semibold shadow-xs'
+                      : 'text-muted hover:text-text'
+                  }`}
+                >
+                  {p}
+                </button>
+              );
+            })}
           </div>
-          <RippleButton
-            variant="pri"
+
+          {/* Primary "New invoice" Button */}
+          <Button
+            variant="primary"
+            size="md"
             onClick={() => navigate('/app/invoices/new')}
+            className="h-10 px-4 rounded-lg shrink-0 sm:ml-auto"
           >
-            ＋ New invoice
-          </RippleButton>
+            <Plus className="w-4 h-4 mr-1.5" />
+            <span>New invoice</span>
+          </Button>
         </div>
-      </div>
 
-      {error && (
-        <div style={{ marginBottom: 18, padding: '12px 16px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--badt)', borderRadius: 12, fontSize: 13, fontWeight: 600 }}>
-          {error}
-        </div>
-      )}
-
-      {/* ── 4 KPI Cards ──────────────────────────────────────────────────────── */}
-      <div className="kpis" id="kpis">
-        {kpis.map((item, idx) => (
-          <div className="card" key={idx}>
-            <div className="kh">
-              <span>{item.label}</span>
-              <i>{item.icon}</i>
+        {/* Error Notice */}
+        {error && (
+          <div className="flex items-center justify-between rounded-lg border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm gap-3">
+            <div className="flex items-center gap-2 text-danger min-w-0">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span className="truncate">{error}</span>
             </div>
-            <div className="big num">{item.value}</div>
-            <div className="kn">{item.subtext}</div>
-            {renderSparkline(item.series, item.color)}
+            <Button variant="secondary" size="sm" onClick={loadRealData} className="shrink-0">
+              Retry
+            </Button>
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* ── Row 2: Chart + Needs Attention / Setup ───────────────────────────── */}
-      <div className="g2">
-        {/* Chart Card */}
-        <section className="card" id="chart">
-          <div className="hd">
+        {/* ── 4 KPI Stat Cards (1 row from md, 2x2 below) ────────────────────── */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* 1. Net revenue */}
+          <div className="rounded-xl border border-border bg-surface p-4 flex flex-col justify-between space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-medium text-muted">Net revenue</span>
+              <IndianRupee className="w-4 h-4 text-muted" />
+            </div>
             <div>
-              <h3>6-month revenue &amp; tax</h3>
-              <p className="sub">Taxable sales and GST collected each month</p>
-            </div>
-            <div className="seg" id="ct">
-              <button
-                className={!isStk ? 'on' : ''}
-                onClick={() => setChartTab('rt')}
-              >
-                Revenue &amp; tax
-              </button>
-              <button
-                className={isStk ? 'on' : ''}
-                onClick={() => setChartTab('gb')}
-              >
-                GST breakdown
-              </button>
-            </div>
-          </div>
-
-          <div className="tick">
-            <b className="num">{inr(currentVal)}</b>
-            {!isEmpty && currentVal > 0 && (
-              <span className={`chip ${pctChange >= 0 ? 'c-Paid' : 'c-Overdue'}`}>
-                {pctChange >= 0 ? '▲ ' : '▼ '}
-                {Math.abs(pctChange).toFixed(1)}%
-              </span>
-            )}
-            <small>
-              {seriesNames.primary} · {monthLabels[5]} vs {monthLabels[4]}
-            </small>
-          </div>
-
-          {/* MUI X Charts LineChart */}
-          <RevenueMuiChart
-            months={monthLabels}
-            mainData={primaryData}
-            secondaryData={secondaryData}
-            mainLabel={seriesNames.primary}
-            secondaryLabel={seriesNames.secondary}
-            isEmpty={isEmpty}
-          />
-
-          <div className="lg">
-            {isStk ? (
-              <>
-                <span>
-                  <i style={{ background: 'var(--accent)' }}></i>
-                  CGST + SGST
-                </span>
-                <span>
-                  <i style={{ background: 'var(--muted)' }}></i>
-                  IGST
-                </span>
-              </>
-            ) : (
-              <>
-                <span>
-                  <i style={{ background: 'var(--accent)' }}></i>
-                  Taxable sales
-                </span>
-                <span>
-                  <i style={{ background: 'var(--muted)' }}></i>
-                  GST collected
-                </span>
-              </>
-            )}
-          </div>
-        </section>
-
-        {/* Right Side Card: Needs Attention vs Get Set Up */}
-        <section className="card" id="side2">
-          {isEmpty ? (
-            <>
-              <h3>Get set up</h3>
-              <p className="sub">Finish these to send your first invoice</p>
-              <div className="prog">
-                <u style={{ width: '20%' }}></u>
+              <div className="text-[20px] font-semibold text-text tabular-nums tracking-tight">
+                {formatCurrency(taxableTurnover)}
               </div>
-              <p className="sub" style={{ marginBottom: 8 }}>
-                1 of 5 done
-              </p>
-              {checklist.map((step, i) => (
-                <div key={i} className={`chk${i === 0 ? ' d' : ''}`}>
-                  <i>{i === 0 ? '✓' : ''}</i>
-                  <span>{step}</span>
-                </div>
-              ))}
-              <RippleButton
-                variant="pri"
-                style={{ width: '100%', marginTop: 12 }}
-                onClick={() => navigate('/app/settings')}
+              <div className="text-[12px] text-muted min-h-[18px] mt-0.5 truncate">
+                {trend ? (
+                  <span
+                    className={`inline-flex items-center gap-1 font-medium ${
+                      trend.isPositive ? 'text-accent' : 'text-danger'
+                    }`}
+                  >
+                    <span>{trend.isPositive ? '▲' : '▼'}</span>
+                    <span>{trend.pct}%</span>
+                    <span className="text-muted font-normal ml-0.5">{trend.label}</span>
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          {/* 2. GST collected */}
+          <div className="rounded-xl border border-border bg-surface p-4 flex flex-col justify-between space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-medium text-muted">GST collected</span>
+              <Percent className="w-4 h-4 text-muted" />
+            </div>
+            <div>
+              <div className="text-[20px] font-semibold text-text tabular-nums tracking-tight">
+                {formatCurrency(gstTotal)}
+              </div>
+              <div
+                className="text-[12px] text-muted min-h-[18px] mt-0.5 truncate"
+                title={`CGST ${formatShortK(cgstTotal)} · SGST ${formatShortK(sgstTotal)} · IGST ${formatShortK(igstTotal)}`}
               >
-                Start with business details
-              </RippleButton>
-            </>
-          ) : (
-            <>
-              <h3>Needs attention</h3>
-              <p className="sub">Follow up before payments run late</p>
-              <div style={{ marginTop: 10 }}>
-                {unpaidRows.length === 0 ? (
-                  <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--mute)' }}>
-                    <p style={{ fontWeight: 600, color: 'var(--ok)' }}>✓ All invoices settled</p>
-                    <small>No overdue or pending payments</small>
-                  </div>
+                CGST {formatShortK(cgstTotal)} · SGST {formatShortK(sgstTotal)} · IGST {formatShortK(igstTotal)}
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Outstanding */}
+          <div className="rounded-xl border border-border bg-surface p-4 flex flex-col justify-between space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-medium text-muted">Outstanding</span>
+              <Clock className="w-4 h-4 text-muted" />
+            </div>
+            <div>
+              <div className="text-[20px] font-semibold text-text tabular-nums tracking-tight">
+                {formatCurrency(dueAmount)}
+              </div>
+              <div className="text-[12px] text-muted min-h-[18px] mt-0.5 truncate">
+                {issuedUnpaidInvoices.length === 0 ? (
+                  'All payments settled'
                 ) : (
-                  unpaidRows.slice(0, 5).map((inv, idx) => {
-                    const id = inv._id || inv.id || inv.invoiceNumber;
-                    const isSent = remindedMap[id];
-                    const custName = inv.customer?.name || 'Customer';
-                    const amount = inv.netTotal || inv.grandTotal || 0;
-                    return (
-                      <div className="row" key={idx}>
-                        <span className="av">{custName[0]?.toUpperCase() || 'C'}</span>
-                        <div>
-                          <b>{custName}</b>
-                          <small>
-                            {inr(amount)} · {inv.status || 'Due'}
-                          </small>
-                        </div>
-                        <RippleButton
-                          variant="sm"
-                          disabled={isSent}
-                          onClick={() => handleRemindClick(id)}
-                        >
-                          {isSent ? 'Sent ✓' : 'Remind'}
-                        </RippleButton>
-                      </div>
-                    );
-                  })
+                  <span>
+                    {issuedUnpaidInvoices.length}{' '}
+                    {issuedUnpaidInvoices.length === 1 ? 'invoice' : 'invoices'} unpaid
+                  </span>
                 )}
               </div>
-              <div className="note">
-                ⏰ GSTR-1 for October is due on 11 Nov
+            </div>
+          </div>
+
+          {/* 4. Customers */}
+          <div className="rounded-xl border border-border bg-surface p-4 flex flex-col justify-between space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-medium text-muted">Customers</span>
+              <Users className="w-4 h-4 text-muted" />
+            </div>
+            <div>
+              <div className="text-[20px] font-semibold text-text tabular-nums tracking-tight">
+                {customersCount}
               </div>
-            </>
-          )}
-        </section>
-      </div>
-
-      {/* ── Row 3: Recent Invoices + GST Liability ───────────────────────────── */}
-      <div className="g3">
-        {/* Recent Invoices Card */}
-        <section className="card" id="recent">
-          <div className="hd">
-            <div>
-              <h3>Recent invoices</h3>
-              <p className="sub">Your latest invoices and their payment status</p>
+              <div className="text-[12px] text-muted min-h-[18px] mt-0.5 truncate">
+                {invoices.length === 0
+                  ? 'Add your first customer'
+                  : `${invoices.length} ${invoices.length === 1 ? 'invoice' : 'invoices'} issued`}
+              </div>
             </div>
-            <RippleButton
-              variant="sm"
-              onClick={() => navigate('/app/invoices')}
-            >
-              View all ({invoices.length})
-            </RippleButton>
           </div>
+        </div>
 
-          {isEmpty ? (
-            <div className="empty">
-              <div className="ic">🧾</div>
-              <b>No invoices yet</b>
-              <p>
-                Create your first GST invoice with automatic CGST, SGST and IGST.
-              </p>
-              <RippleButton
-                variant="pri"
-                onClick={() => navigate('/app/invoices/new')}
+        {/* ── Row 2: Chart + Needs Attention (Unified grid & right edge) ──────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 items-start">
+          {/* Chart Section */}
+          <section className="rounded-xl border border-border bg-surface p-4 flex flex-col space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-[14px] font-semibold text-text">6-month revenue &amp; tax</h2>
+                <p className="text-[12px] text-muted">Taxable sales and GST collected each month</p>
+              </div>
+
+              {/* Segmented Control */}
+              <div className="inline-flex items-center p-0.5 rounded-lg border border-border bg-bg text-xs self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setChartTab('rt')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                    !isGstBreakdown
+                      ? 'bg-surface text-text shadow-xs'
+                      : 'text-muted hover:text-text'
+                  }`}
+                >
+                  Revenue &amp; tax
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartTab('gb')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                    isGstBreakdown
+                      ? 'bg-surface text-text shadow-xs'
+                      : 'text-muted hover:text-text'
+                  }`}
+                >
+                  GST breakdown
+                </button>
+              </div>
+            </div>
+
+            {/* Compact empty state or Chart */}
+            {isChartEmpty ? (
+              <div className="h-[240px] flex flex-col items-center justify-center text-center p-4">
+                <p className="text-sm font-medium text-muted">No sales in this period</p>
+                <p className="text-xs text-faint mt-1">
+                  Sales and tax for the last 6 months will appear here.
+                </p>
+              </div>
+            ) : (
+              <RevenueMuiChart
+                months={monthLabels}
+                mainData={primaryData}
+                secondaryData={secondaryData}
+                mainLabel={seriesNames.primary}
+                secondaryLabel={seriesNames.secondary}
+                isEmpty={false}
+              />
+            )}
+
+            {/* Legend */}
+            <div className="flex items-center gap-4 text-xs text-muted pt-2 border-t border-border">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-accent" />
+                <span>{seriesNames.primary}</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-muted" />
+                <span>{seriesNames.secondary}</span>
+              </span>
+            </div>
+          </section>
+
+          {/* Needs Attention Section */}
+          <section className="rounded-xl border border-border bg-surface p-4 flex flex-col space-y-3">
+            <div>
+              <h2 className="text-[14px] font-semibold text-text">Needs attention</h2>
+              <p className="text-[12px] text-muted">Overdue and upcoming due payments</p>
+            </div>
+
+            {needsAttentionInvoices.length === 0 ? (
+              <div className="py-8 text-center text-xs text-muted">
+                Nothing needs attention.
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {needsAttentionInvoices.slice(0, 5).map((inv) => {
+                  const id = inv._id || inv.id;
+                  const custName = inv.customer?.name || 'Customer';
+                  const amount = inv.netTotal || inv.grandTotal || 0;
+                  const dueInfo = getDueStatus(inv.dueDate);
+
+                  return (
+                    <div
+                      key={id}
+                      onClick={() => navigate(`/app/invoices/${id}`)}
+                      className="py-2.5 flex items-center justify-between gap-3 hover:bg-surface-hover transition-colors cursor-pointer -mx-1 px-1 rounded-md"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-text truncate">{custName}</p>
+                        <p className="text-[11px] text-muted truncate">
+                          {inv.invoiceNumber} ·{' '}
+                          <span className={dueInfo.className}>{dueInfo.label}</span>
+                        </p>
+                      </div>
+                      <span className="text-xs font-medium text-text tabular-nums shrink-0">
+                        {formatCurrency(amount)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* GSTR-1 Reminder in plain bordered row */}
+            <div className="flex items-center gap-2.5 p-3 rounded-lg border border-border bg-surface text-xs text-muted mt-auto">
+              <CalendarClock className="w-4 h-4 text-muted shrink-0" />
+              <span className="truncate">{getGstr1Reminder()}</span>
+            </div>
+          </section>
+        </div>
+
+        {/* ── Row 3: Recent Invoices + GST Liability (Unified grid & right edge) ─ */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 items-start">
+          {/* Recent Invoices Section */}
+          <section className="rounded-xl border border-border bg-surface p-4 flex flex-col space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[14px] font-semibold text-text">Recent invoices</h2>
+              <button
+                type="button"
+                onClick={() => navigate('/app/invoices')}
+                className="text-xs font-medium text-accent hover:underline cursor-pointer"
               >
-                ＋ Create first invoice
-              </RippleButton>
+                View all
+              </button>
             </div>
-          ) : (
-            <div className="tw">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Invoice</th>
-                    <th>Customer</th>
-                    <th>Date</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentTableRows.map((r, i) => (
-                    <tr key={i}>
-                      <td>
-                        <b>{r.id}</b>
-                      </td>
-                      <td>{r.c}</td>
-                      <td className="mu">{r.d}</td>
-                      <td className="num">{inr(r.a)}</td>
-                      <td>
-                        <span className={`chip c-${r.s}`}>{r.s}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
 
-        {/* GST Liability Card */}
-        <section className="card" id="gst">
-          <div className="hd">
-            <div>
-              <h3>GST liability</h3>
-              <p className="sub">Last 6 months</p>
-            </div>
-            <span
-              className="chip"
-              style={{ background: 'var(--accent-soft-bg)', color: 'var(--accent-soft-text)' }}
-            >
-              GSTR-1 ready
-            </span>
-          </div>
+            {recentInvoices.length === 0 ? (
+              <div className="py-8 flex flex-col items-center justify-center text-center">
+                <FileText className="w-8 h-8 text-faint mb-2" />
+                <p className="text-sm font-medium text-text">No invoices yet</p>
+                <p className="text-xs text-muted mt-0.5">
+                  Create your first GST invoice to get started.
+                </p>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => navigate('/app/invoices/new')}
+                  className="mt-3"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  <span>Create invoice</span>
+                </Button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                <div className="min-w-[500px]">
+                  {/* Grid Header */}
+                  <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_100px] gap-3 px-3 py-2 text-[12px] font-medium text-muted uppercase tracking-wider border-b border-border">
+                    <span>Invoice</span>
+                    <span>Customer</span>
+                    <span>Date</span>
+                    <span className="text-right">Amount</span>
+                    <span className="text-right">Status</span>
+                  </div>
 
-          {isEmpty ? (
-            <div className="mix"></div>
-          ) : (
-            <div className="mix">
-              <u
-                style={{
-                  width: `${X ? ((CG / X) * 100).toFixed(1) : 0}%`,
-                  background: 'var(--accent)'
-                }}
-              ></u>
-              <u
-                style={{
-                  width: `${X ? ((SG / X) * 100).toFixed(1) : 0}%`,
-                  background: 'var(--accent-text)'
-                }}
-              ></u>
-              <u
-                style={{
-                  width: `${X ? ((IG / X) * 100).toFixed(1) : 0}%`,
-                  background: 'var(--muted)'
-                }}
-              ></u>
-            </div>
-          )}
+                  {/* Grid Rows */}
+                  <div className="divide-y divide-border">
+                    {recentInvoices.map((inv) => {
+                      const id = inv._id || inv.id;
+                      const amount = inv.netTotal || inv.grandTotal || 0;
+                      return (
+                        <div
+                          key={id}
+                          onClick={() => navigate(`/app/invoices/${id}`)}
+                          className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_100px] gap-3 px-3 py-3 items-center hover:bg-surface-hover transition-colors cursor-pointer text-xs"
+                        >
+                          <span className="font-semibold text-text truncate">
+                            {inv.invoiceNumber}
+                          </span>
+                          <span className="text-muted truncate">
+                            {inv.customer?.name || 'Customer'}
+                          </span>
+                          <span className="text-muted tabular-nums truncate">
+                            {formatDDMMYYYY(inv.invoiceDate || inv.createdAt)}
+                          </span>
+                          <span className="font-medium text-text tabular-nums text-right">
+                            {formatCurrency(amount)}
+                          </span>
+                          <span className="text-right">
+                            <StatusBadge status={inv.status} />
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
 
-          {[
-            ['Taxable turnover', T],
-            ['CGST (central)', CG],
-            ['SGST (state)', SG],
-            ['IGST (inter-state)', IG]
-          ].map(([label, val], idx) => (
-            <div className="srow" key={idx}>
-              <span>{label}</span>
-              <b className="num">{inr(val)}</b>
+          {/* GST Liability Section */}
+          <section className="rounded-xl border border-border bg-surface p-4 flex flex-col space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-[14px] font-semibold text-text">GST liability</h2>
+                <p className="text-[12px] text-muted">{period}</p>
+              </div>
+              {hasIssuedInvoices && (
+                <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md border border-border bg-surface text-muted">
+                  GSTR-1 ready
+                </span>
+              )}
             </div>
-          ))}
 
-          <div className="tot">
-            <span>Total GST payable</span>
-            <span className="num">{inr(X)}</span>
-          </div>
-        </section>
+            <div className="space-y-2 pt-1 text-xs">
+              {/* Taxable turnover */}
+              <div className="flex items-center justify-between py-1">
+                <span className="text-muted">Taxable turnover</span>
+                <span className="font-medium text-text tabular-nums">
+                  {formatCurrency(taxableTurnover)}
+                </span>
+              </div>
+
+              {/* Show CGST, SGST, IGST unless all are zero */}
+              {!allTaxZero && (
+                <>
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-muted">CGST (central)</span>
+                    <span className="font-medium text-text tabular-nums">
+                      {formatCurrency(cgstTotal)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-muted">SGST (state)</span>
+                    <span className="font-medium text-text tabular-nums">
+                      {formatCurrency(sgstTotal)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-muted">IGST (inter-state)</span>
+                    <span className="font-medium text-text tabular-nums">
+                      {formatCurrency(igstTotal)}
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {/* Total GST payable */}
+              <div className="flex items-center justify-between border-t border-border pt-2.5 font-semibold text-text">
+                <span>Total GST payable</span>
+                <span className="tabular-nums">{formatCurrency(gstTotal)}</span>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );

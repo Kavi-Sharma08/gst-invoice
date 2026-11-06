@@ -26,8 +26,10 @@ import { invoicesApi } from '../api/invoices.api';
 
 import { formatDate } from '../utils/date';
 import { getStateByName, getStateByCode } from '../gst/taxRules';
+import { getCustomerTypeLabel } from '../utils/customer';
 import { useParams } from 'react-router-dom';
 import { useAppNavigate } from '../utils/navigation';
+import { PageHeader } from '../components/layout/PageHeader';
 
 export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNavigate }) {
   const params = useParams();
@@ -246,98 +248,86 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-fade-in pb-16">
-      {/* Top Bar Actions — Glide Document Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-slate-200/80 no-print">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onNavigate('invoices')}
-            className="text-xs text-slate-600 hover:text-slate-900"
-          >
-            <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-            All Invoices
-          </Button>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-extrabold tracking-tight text-slate-900 font-heading">
-              {invoice.invoiceNumber}
-            </h1>
-            <InvoiceStatusBadge status={invoice.status} />
+      {/* Top Bar Actions */}
+      <PageHeader
+        className="no-print !py-0 pb-3 border-b border-border"
+        title={invoice.invoiceNumber || 'INV-DRAFT'}
+        backLink={{ label: 'Invoices', onClick: () => onNavigate('invoices') }}
+        badge={<InvoiceStatusBadge status={invoice.status} />}
+        actions={
+          <div className="flex items-center flex-wrap gap-2">
+            {/* Email button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEmailModalOpen(true)}
+              className="text-xs"
+            >
+              <Mail className="w-3.5 h-3.5 mr-1 text-[var(--accent)]" />
+              Send Email
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleStatusToggle}
+              className="text-xs"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+              {invoice.status === 'Paid' ? 'Mark Unpaid' : 'Mark Paid'}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onNavigate('edit-invoice', invoice._id || invoice.id)}
+              className="text-xs"
+            >
+              <Edit3 className="w-3.5 h-3.5 mr-1" />
+              Edit
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDuplicate}
+              className="text-xs"
+            >
+              <Copy className="w-3.5 h-3.5 mr-1" />
+              Duplicate
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrint}
+              className="text-xs"
+            >
+              <Printer className="w-3.5 h-3.5 mr-1" />
+              Print
+            </Button>
+
+            <Button
+              size="sm"
+              onClick={handleDownloadPDF}
+              className="text-xs shadow-xs"
+            >
+              <Download className="w-3.5 h-3.5 mr-1" />
+              Download PDF
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDelete}
+              className="text-xs text-rose-600 hover:bg-rose-50"
+              title="Delete Invoice"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
           </div>
-        </div>
-
-        <div className="flex items-center flex-wrap gap-2">
-          {/* Email button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsEmailModalOpen(true)}
-            className="text-xs"
-          >
-            <Mail className="w-3.5 h-3.5 mr-1 text-[var(--accent)]" />
-            Send Email
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleStatusToggle}
-            className="text-xs"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-            {invoice.status === 'Paid' ? 'Mark Unpaid' : 'Mark Paid'}
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onNavigate('edit-invoice', invoice._id || invoice.id)}
-            className="text-xs"
-          >
-            <Edit3 className="w-3.5 h-3.5 mr-1" />
-            Edit
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDuplicate}
-            className="text-xs"
-          >
-            <Copy className="w-3.5 h-3.5 mr-1" />
-            Duplicate
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handlePrint}
-            className="text-xs"
-          >
-            <Printer className="w-3.5 h-3.5 mr-1" />
-            Print
-          </Button>
-
-          <Button
-            size="sm"
-            onClick={handleDownloadPDF}
-            className="text-xs shadow-xs"
-          >
-            <Download className="w-3.5 h-3.5 mr-1" />
-            Download PDF
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleDelete}
-            className="text-xs text-rose-600 hover:bg-rose-50"
-            title="Delete Invoice"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Live Email Delivery Status Banner */}
       {deliveryStatus && (
@@ -490,7 +480,7 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
               <span className="font-bold">GSTIN:</span> {customer.gstin}
             </p>
           ) : (
-            <p className="text-[11px] text-slate-500 mt-0.5">Tax Status: Unregistered Consumer (B2C)</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">Tax Status: {getCustomerTypeLabel(customer.customerType)}</p>
           )}
           {customer.address && (
             <p className="text-slate-600 mt-1 whitespace-pre-line leading-relaxed">

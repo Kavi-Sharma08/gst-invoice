@@ -31,7 +31,9 @@ export function toAppRoute(page, id = null) {
     case 'invoice-details':
       return id ? `/app/invoices/${id}` : '/app/invoices';
     case 'customers':
-      return '/app/customers';
+      return id ? `/app/customers/${id}` : '/app/customers';
+    case 'customer-details':
+      return id ? `/app/customers/${id}` : '/app/customers';
     case 'products':
       return '/app/products';
     case 'settings':

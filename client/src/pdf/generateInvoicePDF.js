@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { numberToWords } from '../utils/currency';
 import { formatDate } from '../utils/date';
 import { getStateByName, getStateByCode } from '../gst/taxRules';
+import { getCustomerTypeLabel } from '../utils/customer';
 
 /**
  * Pure PDF generation utility.
@@ -160,7 +161,7 @@ export function generateInvoicePDF(invoice, options = { action: 'download' }) {
     doc.text(customer.gstin, margin + 13, cY);
     cY += 4.5;
   } else {
-    doc.text('Tax Status: Unregistered / Consumer (B2C)', margin, cY);
+    doc.text(`Tax Status: ${getCustomerTypeLabel(customer.customerType)}`, margin, cY);
     cY += 4.5;
   }
   if (customer.address) {

@@ -6,23 +6,33 @@ import {
   FileText,
   Users,
   Package,
-  BarChart2,
   Settings,
   Menu,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-const NAV_LINKS = [
+const MAIN_NAV_LINKS = [
   { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/app/invoices', label: 'Invoices', icon: FileText },
   { to: '/app/customers', label: 'Customers', icon: Users },
   { to: '/app/products', label: 'Products & services', icon: Package },
-  { to: '/app/reports', label: 'Reports', icon: BarChart2 },
-  { to: '/app/settings', label: 'Settings', icon: Settings }
 ];
+
+function getPageName(pathname) {
+  if (pathname === '/app' || pathname === '/app/' || pathname === '/app/dashboard') return 'Dashboard';
+  if (pathname === '/app/invoices/new') return 'New invoice';
+  if (pathname.startsWith('/app/invoices/') && pathname.endsWith('/edit')) return 'Edit invoice';
+  if (pathname.startsWith('/app/invoices/')) return 'Invoice';
+  if (pathname.startsWith('/app/invoices')) return 'Invoices';
+  if (pathname.startsWith('/app/customers/')) return 'Customer';
+  if (pathname.startsWith('/app/customers')) return 'Customers';
+  if (pathname.startsWith('/app/products')) return 'Products & services';
+  if (pathname.startsWith('/app/settings')) return 'Settings';
+  return '';
+}
 
 export function AceternitySidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -74,26 +84,28 @@ export function AceternitySidebar() {
       <div className="md:hidden sticky top-0 z-40 w-full h-14 bg-surface border-b border-border px-4 flex items-center justify-between shrink-0">
         <Link
           to="/app/dashboard"
-          className="flex items-center gap-2.5 font-semibold text-text text-base"
+          className="flex items-center gap-2 font-semibold text-text text-base shrink-0"
         >
           <i className="w-8 h-8 rounded-lg bg-surface border border-border flex items-center justify-center not-italic font-bold text-text">
             ₹
           </i>
           <span>BillGST</span>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-border text-muted">
-            v2.0
-          </span>
         </Link>
 
-        <button
-          type="button"
-          className="p-2 -mr-2 rounded-lg text-text hover:bg-border/60 transition-colors cursor-pointer"
-          aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
-          aria-expanded={mobileOpen}
-          onClick={() => setMobileOpen(!mobileOpen)}
-        >
-          <Menu className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm font-medium text-text truncate max-w-[140px] sm:max-w-[200px]">
+            {getPageName(location.pathname)}
+          </span>
+          <button
+            type="button"
+            className="p-2 -mr-2 rounded-lg text-text hover:bg-border/60 transition-colors cursor-pointer"
+            aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen(!mobileOpen)}
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* ── 2. MOBILE OFF-CANVAS DRAWER (< md): fixed w-72, backdrop bg-black/50 ── */}
@@ -137,8 +149,9 @@ export function AceternitySidebar() {
           </button>
         </div>
 
+        {/* Main group */}
         <nav className="flex-1 py-4 space-y-1 overflow-y-auto">
-          {NAV_LINKS.map((item) => {
+          {MAIN_NAV_LINKS.map((item) => {
             const active = isLinkActive(item.to);
             const Icon = item.icon;
             return (
@@ -159,6 +172,23 @@ export function AceternitySidebar() {
           })}
         </nav>
 
+        {/* Bottom group: Settings */}
+        <div className="pt-2 pb-2 border-t border-border space-y-1">
+          <NavLink
+            to="/app/settings"
+            onClick={() => setMobileOpen(false)}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              isLinkActive('/app/settings')
+                ? 'bg-border text-text font-semibold'
+                : 'text-muted hover:text-text hover:bg-border/40'
+            }`}
+          >
+            <Settings className="w-4 h-4 shrink-0" />
+            <span>Settings</span>
+          </NavLink>
+        </div>
+
+        {/* User profile row */}
         <div className="pt-3 border-t border-border">
           {user && (
             <div className="flex items-center gap-2.5 px-2 py-1">
@@ -190,9 +220,9 @@ export function AceternitySidebar() {
             </span>
           </Link>
 
-          {/* Nav links */}
+          {/* Main group */}
           <nav className="flex-1 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
-            {NAV_LINKS.map((item) => {
+            {MAIN_NAV_LINKS.map((item) => {
               const active = isLinkActive(item.to);
               const Icon = item.icon;
               return (
@@ -217,8 +247,28 @@ export function AceternitySidebar() {
             })}
           </nav>
 
+          {/* Bottom group: Settings */}
+          <div className="pt-2 pb-1 border-t border-border overflow-hidden shrink-0">
+            <NavLink
+              to="/app/settings"
+              title="Settings"
+              className={`flex items-center h-10 px-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isLinkActive('/app/settings')
+                  ? 'bg-border text-text font-semibold'
+                  : 'text-muted hover:text-text hover:bg-border/40'
+              }`}
+            >
+              <span className="w-5 flex items-center justify-center shrink-0">
+                <Settings className="w-4 h-4" />
+              </span>
+              <span className="ml-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 whitespace-nowrap">
+                Settings
+              </span>
+            </NavLink>
+          </div>
+
           {/* Bottom user */}
-          <div className="pt-3 border-t border-border overflow-hidden shrink-0">
+          <div className="pt-2 border-t border-border overflow-hidden shrink-0">
             {user && (
               <div className="flex items-center gap-2.5 px-1 py-1">
                 <UserButton afterSignOutUrl="/" />
@@ -280,9 +330,9 @@ export function AceternitySidebar() {
           </div>
         )}
 
-        {/* Nav links */}
+        {/* Main group */}
         <nav className="flex-1 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
-          {NAV_LINKS.map((item) => {
+          {MAIN_NAV_LINKS.map((item) => {
             const active = isLinkActive(item.to);
             const Icon = item.icon;
             return (
@@ -309,8 +359,30 @@ export function AceternitySidebar() {
           })}
         </nav>
 
+        {/* Bottom group: Settings */}
+        <div className="pt-2 pb-1 border-t border-border overflow-hidden shrink-0">
+          <NavLink
+            to="/app/settings"
+            title={isCollapsed ? 'Settings' : undefined}
+            className={`flex items-center h-10 px-2.5 rounded-lg text-sm font-medium transition-colors ${
+              isLinkActive('/app/settings')
+                ? 'bg-border text-text font-semibold'
+                : 'text-muted hover:text-text hover:bg-border/40'
+            }`}
+          >
+            <span className="w-5 flex items-center justify-center shrink-0">
+              <Settings className="w-4 h-4" />
+            </span>
+            {!isCollapsed && (
+              <span className="ml-3 whitespace-nowrap truncate">
+                Settings
+              </span>
+            )}
+          </NavLink>
+        </div>
+
         {/* Bottom user */}
-        <div className="pt-3 border-t border-border overflow-hidden shrink-0">
+        <div className="pt-2 border-t border-border overflow-hidden shrink-0">
           {user && (
             <div className="flex items-center gap-2.5 px-1 py-1">
               <UserButton afterSignOutUrl="/" />

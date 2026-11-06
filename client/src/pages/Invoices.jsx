@@ -3,17 +3,17 @@
  *
  * Design System:
  *  - Colors: strictly semantic tokens (bg, surface, border, text, muted, faint, accent, danger)
- *  - Layout: max-w-screen-xl px-4 sm:px-6 py-6 font-sans
- *  - Header: Invoices (20px/600) + record count (small muted text) + subtitle (14px muted) + Create Invoice button
- *  - Stat cards: 3 compact cards (p-4), label 13px muted with small dot, value 20px/600 tabular-nums in text-text
- *  - Filter bar: tabs and search on one row directly on page background
- *  - Table: 52px rows, 1px dividers, hover highlight, tabular-nums amounts, DD/MM/YYYY dates, kebab menu
- *  - Empty state: compact 240px, icon in 40px surface box, header button hidden when list empty
- *  - Loading: 5 skeleton rows
- *  - Error: inline message with Retry button
+ *  - Layout: max-w-screen-xl px-4 sm:px-6 py-6 font-sans, flex-col min-h-full
+ *  - Header: Invoices (20px/600) + record count (small muted) + "Create Invoice" button
+ *  - Stat strip: 3-column bordered strip, p-4, label 13px muted with colored dot, value 20px/600 text-text tabular-nums
+ *  - Filters: underline-style tabs (no pill border) + search (h-10 rounded-lg, full width below sm)
+ *  - Grid: unified constant for header + data rows, px-4 gap-4, h-14, 1px dividers, hover surface
+ *  - Pagination: shared Pagination component, sticky footer, page+q+status in URL
+ *  - Empty states, loading skeletons, inline error with Retry
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -25,7 +25,6 @@ import {
   FileText,
   X,
   AlertCircle,
-  MoreHorizontal
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
@@ -34,6 +33,10 @@ import { formatCurrency } from '../utils/currency';
 import { useDebounce } from '../utils/useDebounce';
 import { useAppNavigate } from '../utils/navigation';
 import { Button } from '../components/invoice/InvoiceEditorUI';
+import { DropdownMenu } from '../components/ui/DropdownMenu';
+import { Pagination } from '../components/ui/Pagination';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { PageHeader } from '../components/layout/PageHeader';
 
 // ── Format Date as DD/MM/YYYY ─────────────────────────────────────────────────
 function formatDDMMYYYY(dateInput) {
@@ -55,25 +58,24 @@ function formatDDMMYYYY(dateInput) {
 }
 
 // ── Status Badge ──────────────────────────────────────────────────────────────
-// Small rounded-md badge with a colored dot + text on muted tinted backgrounds
 function StatusBadge({ status }) {
   const configs = {
     Paid: {
       dot: 'bg-emerald-400',
-      badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+      badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
     },
     Issued: {
       dot: 'bg-indigo-400',
-      badge: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+      badge: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
     },
     Draft: {
       dot: 'bg-muted',
-      badge: 'bg-border text-muted border-border'
+      badge: 'bg-border text-muted border-border',
     },
     Cancelled: {
       dot: 'bg-danger',
-      badge: 'bg-danger/10 text-danger border-danger/20'
-    }
+      badge: 'bg-danger/10 text-danger border-danger/20',
+    },
   };
 
   const c = configs[status] || configs.Draft;
@@ -82,127 +84,24 @@ function StatusBadge({ status }) {
     <span
       className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium border ${c.badge}`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} aria-hidden="true" />
+      <span className={`w-1.5 h-1.5 rounded-full ${c.dot} shrink-0`} aria-hidden="true" />
       <span>{status || 'Draft'}</span>
     </span>
   );
 }
 
-// ── Kebab (⋯) Actions Menu ────────────────────────────────────────────────────
-function RowKebabMenu({ invoice, onNavigate, onDownloadPDF, onDuplicate, onCancel }) {
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef(null);
+// ── Unified grid template: Invoice no. | Customer | Date | Due date | Amount | Status | Actions ──
+const INVOICES_GRID =
+  'grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_120px_48px] gap-4 px-4 items-center';
 
-  useEffect(() => {
-    function handleClickOutside(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setOpen(false);
-      }
-    }
-    if (open) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [open]);
-
-  const targetId = invoice._id || invoice.id;
-  const isDraft = invoice.status === 'Draft';
-  const isCancelled = invoice.status === 'Cancelled';
-
-  return (
-    <div ref={menuRef} className="relative inline-block text-left" onClick={(e) => e.stopPropagation()}>
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-label="Invoice actions"
-        className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-text hover:bg-border transition-colors cursor-pointer"
-      >
-        <MoreHorizontal className="w-4 h-4" />
-      </button>
-
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 mt-1 w-44 rounded-lg bg-surface border border-border shadow-2xl py-1 z-50 text-xs font-medium"
-        >
-          {/* View Details */}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onNavigate('invoice-details', targetId);
-            }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-text hover:bg-border transition-colors cursor-pointer text-left"
-          >
-            <Eye className="w-3.5 h-3.5 text-muted" />
-            <span>View</span>
-          </button>
-
-          {/* Edit (Drafts only) */}
-          {isDraft && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onNavigate('edit-invoice', targetId);
-              }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-text hover:bg-border transition-colors cursor-pointer text-left"
-            >
-              <Edit3 className="w-3.5 h-3.5 text-muted" />
-              <span>Edit</span>
-            </button>
-          )}
-
-          {/* Download PDF */}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onDownloadPDF(invoice);
-            }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-text hover:bg-border transition-colors cursor-pointer text-left"
-          >
-            <Download className="w-3.5 h-3.5 text-muted" />
-            <span>Download PDF</span>
-          </button>
-
-          {/* Duplicate */}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onDuplicate(invoice);
-            }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-text hover:bg-border transition-colors cursor-pointer text-left"
-          >
-            <Copy className="w-3.5 h-3.5 text-muted" />
-            <span>Duplicate</span>
-          </button>
-
-          {/* Cancel */}
-          {!isCancelled && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onCancel(invoice);
-              }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-danger hover:bg-danger/10 transition-colors cursor-pointer text-left border-t border-border mt-1 pt-1.5"
-            >
-              <XCircle className="w-3.5 h-3.5 text-danger" />
-              <span>Cancel invoice</span>
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+// ── Status filter tabs ────────────────────────────────────────────────────────
+const STATUS_TABS = [
+  { id: 'ALL', label: 'All' },
+  { id: 'Paid', label: 'Paid' },
+  { id: 'Issued', label: 'Issued' },
+  { id: 'Draft', label: 'Draft' },
+  { id: 'Cancelled', label: 'Cancelled' },
+];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Main Invoices Page Component
@@ -213,44 +112,71 @@ export function Invoices({ onNavigate: propOnNavigate }) {
   const onNavigate = propOnNavigate || appNavigate;
   const { isAuthenticated } = useAuth();
 
-  const [invoices, setInvoices] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [search, setSearch] = useState('');
-  const debouncedSearch = useDebounce(search, 300);
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Track counts across statuses when viewing all
+  // Read initial state from URL
+  const paramPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+  const parsedLimit = parseInt(searchParams.get('limit') || '10', 10) || 10;
+  const paramLimit = [10, 25, 50].includes(parsedLimit) ? parsedLimit : 10;
+  const paramQ = searchParams.get('q') || '';
+  const paramStatus = searchParams.get('status') || 'ALL';
+
+  const [page, setPage] = useState(paramPage);
+  const [limit, setLimit] = useState(paramLimit);
+  const [search, setSearch] = useState(paramQ);
+  const [statusFilter, setStatusFilter] = useState(
+    STATUS_TABS.find((t) => t.id.toLowerCase() === paramStatus.toLowerCase())?.id || 'ALL'
+  );
+  const debouncedSearch = useDebounce(search, 300);
+
+  // Data state
+  const [invoices, setInvoices] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Status counts (from full unfiltered load)
   const [statusCounts, setStatusCounts] = useState({
-    ALL: 0,
-    Paid: 0,
-    Issued: 0,
-    Draft: 0,
-    Cancelled: 0
+    ALL: 0, Paid: 0, Issued: 0, Draft: 0, Cancelled: 0,
   });
 
-  useEffect(() => {
-    loadInvoices();
-  }, [debouncedSearch, statusFilter, isAuthenticated]);
+  // Cancel confirm dialog
+  const [cancelTarget, setCancelTarget] = useState(null); // invoice object
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState('');
 
-  const loadInvoices = async () => {
+  // Sync URL when state changes
+  useEffect(() => {
+    const params = {};
+    if (page > 1) params.page = String(page);
+    if (limit !== 10) params.limit = String(limit);
+    if (debouncedSearch) params.q = debouncedSearch;
+    if (statusFilter !== 'ALL') params.status = statusFilter.toLowerCase();
+    setSearchParams(params, { replace: true });
+  }, [page, limit, debouncedSearch, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadInvoices = useCallback(async () => {
     try {
-      setLoading(true);
+      setIsFetching(true);
       setError(null);
-      const params = {};
+      const params = { page, limit };
       if (debouncedSearch) params.search = debouncedSearch;
       if (statusFilter !== 'ALL') params.status = statusFilter;
-      const res = await invoicesApi.list(params);
-      const list = Array.isArray(res?.data) ? res.data : (res?.data?.invoices || []);
-      setInvoices(list);
 
-      // When loading unfiltered list, compute live tab counts
+      const res = await invoicesApi.list(params);
+      const data = res?.data;
+      const list = Array.isArray(data) ? data : (data?.invoices || []);
+      const totalCount = data?.total ?? list.length;
+
+      setInvoices(list);
+      setTotal(totalCount);
+
+      // Update status counts when viewing full unfiltered list
       if (statusFilter === 'ALL' && !debouncedSearch) {
-        const counts = { ALL: list.length, Paid: 0, Issued: 0, Draft: 0, Cancelled: 0 };
+        const counts = { ALL: totalCount, Paid: 0, Issued: 0, Draft: 0, Cancelled: 0 };
         list.forEach((inv) => {
-          if (counts[inv.status] !== undefined) {
-            counts[inv.status]++;
-          }
+          if (counts[inv.status] !== undefined) counts[inv.status]++;
         });
         setStatusCounts(counts);
       }
@@ -259,16 +185,38 @@ export function Invoices({ onNavigate: propOnNavigate }) {
       setError(err.message || 'Failed to load invoices. Please check your connection.');
     } finally {
       setLoading(false);
+      setIsFetching(false);
     }
+  }, [page, limit, debouncedSearch, statusFilter]);
+
+  useEffect(() => {
+    setLoading(true);
+    loadInvoices();
+  }, [loadInvoices, isAuthenticated]);
+
+  // Reset to page 1 when filters/search change
+  const handleStatusChange = (id) => {
+    setStatusFilter(id);
+    setPage(1);
   };
 
+  const handleSearchChange = (val) => {
+    setSearch(val);
+    setPage(1);
+  };
+
+  const handleLimitChange = (val) => {
+    setLimit(val);
+    setPage(1);
+  };
+
+  // ── Invoice actions ────────────────────────────────────────────────────────
   const handleDownloadPDF = async (invoice) => {
     try {
       const { generateInvoicePDF } = await import('../pdf/generateInvoicePDF');
       generateInvoicePDF(invoice, { action: 'download' });
     } catch (err) {
       console.error('Failed to generate PDF:', err);
-      alert('Failed to generate invoice PDF.');
     }
   };
 
@@ -277,81 +225,126 @@ export function Invoices({ onNavigate: propOnNavigate }) {
       const targetId = invoice._id || invoice.id;
       const res = await invoicesApi.duplicate(targetId);
       const newId = res?.data?._id || res?.data?.id;
-      onNavigate('edit-invoice', newId);
+      if (newId) onNavigate('edit-invoice', newId);
     } catch (err) {
-      alert(err.message || 'Failed to duplicate invoice');
+      console.error('Failed to duplicate invoice:', err);
     }
   };
 
-  const handleCancelInvoice = async (invoice) => {
-    const targetId = invoice._id || invoice.id;
-    if (window.confirm(`Are you sure you want to cancel invoice ${invoice.invoiceNumber}?`)) {
-      try {
-        await invoicesApi.update(targetId, { status: 'Cancelled' });
-        loadInvoices();
-      } catch (err) {
-        alert(err.message || 'Failed to cancel invoice');
-      }
+  const handleCancelConfirm = async () => {
+    if (!cancelTarget) return;
+    const targetId = cancelTarget._id || cancelTarget.id;
+    try {
+      setCancelling(true);
+      setCancelError('');
+      await invoicesApi.update(targetId, { status: 'Cancelled' });
+      setCancelTarget(null);
+      loadInvoices();
+    } catch (err) {
+      setCancelError(err.message || 'Failed to cancel invoice.');
+    } finally {
+      setCancelling(false);
     }
   };
 
-  // Summary Metrics of loaded invoices
+  // ── Build kebab menu items per invoice ────────────────────────────────────
+  const getMenuItems = (inv) => {
+    const targetId = inv._id || inv.id;
+    const isDraft = inv.status === 'Draft';
+    const isCancelled = inv.status === 'Cancelled';
+
+    const items = [
+      {
+        label: 'View',
+        icon: Eye,
+        onSelect: () => onNavigate('invoice-details', targetId),
+      },
+    ];
+
+    if (isDraft) {
+      items.push({
+        label: 'Edit',
+        icon: Edit3,
+        onSelect: () => onNavigate('edit-invoice', targetId),
+      });
+    }
+
+    items.push({
+      label: 'Download PDF',
+      icon: Download,
+      onSelect: () => handleDownloadPDF(inv),
+    });
+
+    items.push({
+      label: 'Duplicate',
+      icon: Copy,
+      onSelect: () => handleDuplicate(inv),
+    });
+
+    if (!isCancelled) {
+      items.push({
+        label: 'Cancel invoice',
+        icon: XCircle,
+        danger: true,
+        dividerBefore: true,
+        onSelect: () => {
+          setCancelError('');
+          setCancelTarget(inv);
+        },
+      });
+    }
+
+    return items;
+  };
+
+  // ── Summary metrics from current page of invoices ─────────────────────────
   const summary = useMemo(() => {
-    let total = 0;
+    let totalAmt = 0;
     let paid = 0;
     let outstanding = 0;
 
-    (invoices || []).forEach((inv) => {
+    invoices.forEach((inv) => {
       const amt = Number(inv.netTotal ?? inv.grandTotal) || 0;
-      total += amt;
-      if (inv.status === 'Paid') {
-        paid += amt;
-      } else if (inv.status !== 'Cancelled') {
-        outstanding += amt;
-      }
+      if (inv.status !== 'Cancelled') totalAmt += amt;
+      if (inv.status === 'Paid') paid += amt;
+      else if (inv.status !== 'Cancelled') outstanding += amt;
     });
 
-    return { total, paid, outstanding, count: invoices.length };
+    return { total: totalAmt, paid, outstanding };
   }, [invoices]);
 
-  // Check if initial list is completely empty (no search & no status filter)
-  const isEntirelyEmpty = !loading && invoices.length === 0 && !search && statusFilter === 'ALL';
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const hasFilters = !!debouncedSearch || statusFilter !== 'ALL';
+  const isEntirelyEmpty = !loading && total === 0 && !hasFilters;
+  const isNoMatch = !loading && total === 0 && hasFilters;
 
   return (
-    <div className="w-full bg-bg text-text font-sans">
-      <div className="mx-auto max-w-screen-xl px-4 sm:px-6 py-6 space-y-6 pb-24 lg:pb-12">
+    <div className="w-full bg-bg text-text font-sans flex flex-col min-h-full">
+      <div className="mx-auto max-w-screen-xl w-full px-4 sm:px-6 py-6 space-y-6 pb-24 lg:pb-12 flex-1 flex flex-col">
 
-        {/* ── 1. Page Header: Title + Subtitle on one block, icon-only '+' on mobile ── */}
-        <div className="flex items-start sm:items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <h1 className="text-[20px] font-semibold text-text tracking-tight leading-tight">
-                Invoices
-              </h1>
-              <span className="text-xs font-normal text-muted">
-                {summary.count} {summary.count === 1 ? 'record' : 'records'}
-              </span>
-            </div>
-            <p className="text-sm text-muted mt-0.5">
-              Manage tax invoices, monitor payment statuses, and download GST-compliant PDFs
-            </p>
-          </div>
+        {/* ── 1. Page Header ──────────────────────────────────────────────── */}
+        <PageHeader
+          title="Invoices"
+          count={total}
+          hideTitleOnMobile
+          actions={
+            !isEntirelyEmpty && (
+              <Button
+                variant="primary"
+                size="md"
+                aria-label="Create Invoice"
+                onClick={() => onNavigate('create-invoice')}
+                className="shrink-0 h-10 w-10 sm:w-auto p-0 sm:px-4 flex items-center justify-center rounded-lg"
+                title="Create Invoice"
+              >
+                <Plus className="w-4 h-4 shrink-0" />
+                <span className="hidden sm:inline">Create Invoice</span>
+              </Button>
+            )
+          }
+        />
 
-          {!isEntirelyEmpty && (
-            <Button
-              variant="primary"
-              size="md"
-              aria-label="Create Invoice"
-              onClick={() => onNavigate('create-invoice')}
-              className="shrink-0 h-10 w-10 sm:w-auto p-0 sm:px-4 flex items-center justify-center rounded-lg"
-            >
-              <Plus className="w-4 h-4 shrink-0" />
-              <span className="hidden sm:inline">Create Invoice</span>
-            </Button>
-          )}
-        </div>
-
-        {/* ── 2. Error Notice (inline with Retry button) ────────────────────── */}
+        {/* ── 2. Error Notice ─────────────────────────────────────────────── */}
         {error && (
           <div className="flex items-center justify-between rounded-lg border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm gap-3">
             <div className="flex items-center gap-2 text-danger min-w-0">
@@ -364,94 +357,88 @@ export function Invoices({ onNavigate: propOnNavigate }) {
           </div>
         )}
 
-        {/* ── 3. Three Compact Stat Cards (1 col below sm, 3 cols from sm) ──── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-          {/* Total Billed */}
-          <div className="rounded-xl border border-border bg-surface p-4 space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-accent shrink-0" aria-hidden="true" />
-              <span className="text-[13px] font-medium text-muted">Total billed</span>
+        {/* ── 3. Stats Strip (3 equal cells, never stacks) ────────────────── */}
+        {!isEntirelyEmpty && (
+          <div className="grid grid-cols-3 divide-x divide-border rounded-xl border border-border bg-surface overflow-hidden">
+            <div className="p-3 sm:p-4 space-y-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" aria-hidden="true" />
+                <span className="text-xs sm:text-[13px] font-medium text-muted truncate">Total billed</span>
+              </div>
+              <div className="text-base sm:text-[20px] font-semibold text-text tabular-nums tracking-tight truncate">
+                {formatCurrency(summary.total)}
+              </div>
             </div>
-            <div className="text-[20px] font-semibold text-text tabular-nums">
-              {formatCurrency(summary.total)}
+            <div className="p-3 sm:p-4 space-y-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" aria-hidden="true" />
+                <span className="text-xs sm:text-[13px] font-medium text-muted truncate">Paid</span>
+              </div>
+              <div className="text-base sm:text-[20px] font-semibold text-text tabular-nums tracking-tight truncate">
+                {formatCurrency(summary.paid)}
+              </div>
             </div>
-          </div>
-
-          {/* Paid */}
-          <div className="rounded-xl border border-border bg-surface p-4 space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" aria-hidden="true" />
-              <span className="text-[13px] font-medium text-muted">Paid</span>
-            </div>
-            <div className="text-[20px] font-semibold text-text tabular-nums">
-              {formatCurrency(summary.paid)}
-            </div>
-          </div>
-
-          {/* Outstanding */}
-          <div className="rounded-xl border border-border bg-surface p-4 space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" aria-hidden="true" />
-              <span className="text-[13px] font-medium text-muted">Outstanding</span>
-            </div>
-            <div className="text-[20px] font-semibold text-text tabular-nums">
-              {formatCurrency(summary.outstanding)}
+            <div className="p-3 sm:p-4 space-y-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" aria-hidden="true" />
+                <span className="text-xs sm:text-[13px] font-medium text-muted truncate">Outstanding</span>
+              </div>
+              <div className="text-base sm:text-[20px] font-semibold text-text tabular-nums tracking-tight truncate">
+                {formatCurrency(summary.outstanding)}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* ── 4. Filters & Search (tabs single row overflow-x-auto, search full width below on mobile) ── */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          {/* Segmented Filter Tabs: single row, overflow-x-auto, tabs shrink-0, hide scrollbar */}
-          <div className="w-full md:w-auto overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            <div className="inline-flex p-1 bg-surface rounded-lg border border-border min-w-max">
-              {[
-                { id: 'ALL', label: 'All' },
-                { id: 'Paid', label: 'Paid' },
-                { id: 'Issued', label: 'Issued' },
-                { id: 'Draft', label: 'Draft' },
-                { id: 'Cancelled', label: 'Cancelled' }
-              ].map((tab) => {
-                const active = statusFilter === tab.id;
-                const count = statusCounts[tab.id] ?? 0;
-
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setStatusFilter(tab.id)}
-                    className={`h-8 px-3 rounded-md text-xs font-medium cursor-pointer transition-colors whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
-                      active
-                        ? 'bg-border text-text font-semibold shadow-xs'
-                        : 'text-muted hover:text-text'
+        {/* ── 4. Filters: Underline tabs + search ─────────────────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          {/* Status filter tabs — underline style directly on page background */}
+          <div className="flex items-center gap-0 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            {STATUS_TABS.map((tab) => {
+              const active = statusFilter === tab.id;
+              const count = statusCounts[tab.id] ?? 0;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleStatusChange(tab.id)}
+                  className={[
+                    'flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 cursor-pointer transition-colors whitespace-nowrap shrink-0',
+                    active
+                      ? 'border-accent text-text font-semibold'
+                      : 'border-transparent text-muted hover:text-text hover:border-border',
+                  ].join(' ')}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={`text-[11px] tabular-nums font-normal ${
+                      active ? 'text-muted' : 'text-faint'
                     }`}
                   >
-                    <span>{tab.label}</span>
-                    <span className={`text-[11px] tabular-nums ${active ? 'text-text' : 'text-faint'}`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Search Bar: full width on its own row under tabs on mobile; 320px on desktop */}
-          <div className="relative w-full md:w-80 shrink-0">
+          {/* Search bar */}
+          <div className="relative w-full sm:w-80 shrink-0">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
             <input
               type="text"
               placeholder="Search by invoice # or customer…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-10 w-full rounded-lg border border-border bg-surface pl-9 pr-8 text-sm font-normal text-text placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent"
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="h-10 w-full rounded-lg border border-border bg-surface pl-9 pr-9 text-sm font-normal text-text placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent"
             />
             {search && (
               <button
                 type="button"
-                onClick={() => setSearch('')}
+                onClick={() => handleSearchChange('')}
+                title="Clear search"
                 aria-label="Clear search"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-text cursor-pointer p-0.5"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-text cursor-pointer p-0.5 rounded"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -459,183 +446,232 @@ export function Invoices({ onNavigate: propOnNavigate }) {
           </div>
         </div>
 
-        {/* ── 5. Invoices Table Container (Single 1px border, rounded-xl) ────── */}
-        <div className="rounded-xl border border-border bg-surface overflow-hidden">
+        {/* ── 5. Invoice List (flex-1 to fill height) ──────────────────────── */}
+        <div className="flex-1 min-w-0">
           {loading ? (
-            /* Skeleton Loading (5 Rows) */
+            /* 5a. Skeleton loading — 5 rows */
             <div className="divide-y divide-border">
+              {/* Header skeleton */}
+              <div className={`${INVOICES_GRID} py-3 border-b border-border`}>
+                {[160, 180, 100, 100, 100, 70, 28].map((w, i) => (
+                  <div
+                    key={i}
+                    className={`h-3 bg-border rounded animate-pulse ${i === 4 ? 'ml-auto' : ''}`}
+                    style={{ width: w, maxWidth: '100%' }}
+                  />
+                ))}
+              </div>
               {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="h-[52px] flex items-center px-4 gap-6 animate-pulse">
+                <div key={i} className={`${INVOICES_GRID} h-14 animate-pulse`}>
                   <div className="h-3.5 bg-border rounded w-28" />
-                  <div className="h-3.5 bg-border rounded w-40" />
+                  <div className="h-3.5 bg-border rounded w-36" />
                   <div className="h-3.5 bg-border rounded w-20" />
                   <div className="h-3.5 bg-border rounded w-20" />
                   <div className="h-3.5 bg-border rounded w-24 ml-auto" />
                   <div className="h-5 bg-border rounded-md w-16" />
-                  <div className="h-6 bg-border rounded w-8" />
+                  <div className="h-7 w-7 bg-border rounded ml-auto" />
                 </div>
               ))}
             </div>
-          ) : invoices.length === 0 ? (
-            /* Compact Empty State (~240px vertical space, 40px surface box) */
+          ) : isEntirelyEmpty ? (
+            /* 5b. Entirely empty — no invoices at all */
             <div className="min-h-[240px] flex flex-col items-center justify-center p-6 text-center">
               <div className="w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center text-muted mb-3">
                 <FileText className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-semibold text-text">
-                {search || statusFilter !== 'ALL' ? 'No matching invoices' : 'No invoices yet'}
-              </h3>
+              <h3 className="text-base font-semibold text-text">No invoices yet</h3>
               <p className="text-xs text-muted mt-1 max-w-sm">
-                {search || statusFilter !== 'ALL'
-                  ? 'Try adjusting your filters or clearing your search query.'
-                  : 'Get started by creating your first GST-compliant tax invoice.'}
+                Get started by creating your first GST-compliant tax invoice.
               </p>
-
-              {search || statusFilter !== 'ALL' ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setSearch('');
-                    setStatusFilter('ALL');
-                  }}
-                  className="mt-4"
-                >
-                  Clear filters
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => onNavigate('create-invoice')}
-                  className="mt-4"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Create invoice</span>
-                </Button>
-              )}
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => onNavigate('create-invoice')}
+                className="mt-4"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create invoice</span>
+              </Button>
+            </div>
+          ) : isNoMatch ? (
+            /* 5c. No matches for current filters/search */
+            <div className="min-h-[200px] flex flex-col items-center justify-center p-6 text-center">
+              <div className="w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center text-muted mb-3">
+                <FileText className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-semibold text-text">No matching invoices</h3>
+              <p className="text-xs text-muted mt-1 max-w-sm">
+                Try adjusting your filters or clearing your search query.
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  handleSearchChange('');
+                  handleStatusChange('ALL');
+                }}
+                className="mt-4"
+              >
+                Clear filters
+              </Button>
             </div>
           ) : (
             <>
-              {/* Desktop Table View (≥ md) */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse" aria-label="Invoices list">
-                  <thead>
-                    <tr className="border-b border-border text-muted font-medium uppercase tracking-wider text-[11px]">
-                      <th scope="col" className="py-3 px-4 font-medium">Invoice no.</th>
-                      <th scope="col" className="py-3 px-4 font-medium">Customer</th>
-                      <th scope="col" className="py-3 px-4 font-medium">Date</th>
-                      <th scope="col" className="py-3 px-4 font-medium">Due date</th>
-                      <th scope="col" className="py-3 px-4 font-medium text-right">Amount</th>
-                      <th scope="col" className="py-3 px-4 font-medium">Status</th>
-                      <th scope="col" className="py-3 px-4 font-medium text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {invoices.map((inv) => {
-                      const targetId = inv._id || inv.id;
-                      const customerName = inv.customer?.name || inv.customerName || 'Walk-in Customer';
-                      const net = Number(inv.netTotal ?? inv.grandTotal) || 0;
+              {/* 5d. Desktop Grid Table (≥ md) */}
+              <div className="hidden md:block">
+                {/* Header row */}
+                <div
+                  className={`${INVOICES_GRID} py-3 border-b border-border text-[12px] font-medium text-muted uppercase tracking-wider`}
+                >
+                  <div>Invoice no.</div>
+                  <div>Customer</div>
+                  <div>Date</div>
+                  <div>Due date</div>
+                  <div className="text-right">Amount</div>
+                  <div>Status</div>
+                  <div className="flex justify-end">
+                    <span className="sr-only">Actions</span>
+                  </div>
+                </div>
 
-                      return (
-                        <tr
-                          key={targetId}
-                          onClick={() => onNavigate('invoice-details', targetId)}
-                          className="h-[52px] hover:bg-bg transition-colors cursor-pointer group"
+                {/* Data rows */}
+                <div className="divide-y divide-border">
+                  {invoices.map((inv) => {
+                    const targetId = inv._id || inv.id;
+                    const isDraft = inv.status === 'Draft';
+                    const customerName = inv.customer?.name || inv.customerName || 'Walk-in Customer';
+                    const hasCustomerId = !!(inv.customerId || inv.customer?.id || inv.customer?._id);
+                    const net = Number(inv.netTotal ?? inv.grandTotal) || 0;
+                    const handleRowClick = () =>
+                      isDraft
+                        ? onNavigate('edit-invoice', targetId)
+                        : onNavigate('invoice-details', targetId);
+
+                    return (
+                      <div
+                        key={targetId}
+                        role="button"
+                        tabIndex={0}
+                        onClick={handleRowClick}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleRowClick(); }}
+                        className={`${INVOICES_GRID} h-14 hover:bg-surface/50 transition-colors cursor-pointer text-xs focus:outline-none focus:bg-surface/50`}
+                      >
+                        {/* Invoice no. */}
+                        <div
+                          className="font-medium text-text truncate"
+                          title={inv.invoiceNumber || 'INV-DRAFT'}
                         >
-                          {/* Invoice No. */}
-                          <td className="py-2 px-4 font-medium text-text whitespace-nowrap">
-                            {inv.invoiceNumber || 'INV-DRAFT'}
-                          </td>
+                          {inv.invoiceNumber || 'INV-DRAFT'}
+                        </div>
 
-                          {/* Customer */}
-                          <td className="py-2 px-4 text-text whitespace-nowrap">
-                            <span className="font-normal truncate max-w-[200px] inline-block align-middle">
+                        {/* Customer — links to customer page when real customer id exists */}
+                        <div className="min-w-0">
+                          {hasCustomerId ? (
+                            <span
+                              role="link"
+                              tabIndex={-1}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const custId = inv.customerId || inv.customer?.id || inv.customer?._id;
+                                onNavigate('customers', custId);
+                              }}
+                              title={customerName}
+                              className="font-normal text-text hover:text-accent hover:underline truncate block cursor-pointer"
+                            >
                               {customerName}
                             </span>
-                          </td>
+                          ) : (
+                            <span className="font-normal text-muted truncate block" title={customerName}>
+                              {customerName}
+                            </span>
+                          )}
+                        </div>
 
-                          {/* Date DD/MM/YYYY */}
-                          <td className="py-2 px-4 text-muted whitespace-nowrap">
-                            {formatDDMMYYYY(inv.invoiceDate)}
-                          </td>
+                        {/* Date */}
+                        <div className="text-muted truncate">
+                          {formatDDMMYYYY(inv.invoiceDate)}
+                        </div>
 
-                          {/* Due Date DD/MM/YYYY */}
-                          <td className="py-2 px-4 text-muted whitespace-nowrap">
-                            {inv.dueDate ? formatDDMMYYYY(inv.dueDate) : 'Immediate'}
-                          </td>
+                        {/* Due date */}
+                        <div className="text-muted truncate">
+                          {inv.dueDate ? formatDDMMYYYY(inv.dueDate) : 'Immediate'}
+                        </div>
 
-                          {/* Amount (right-aligned, tabular-nums) */}
-                          <td className="py-2 px-4 font-medium text-text tabular-nums text-right whitespace-nowrap">
-                            {formatCurrency(net)}
-                          </td>
+                        {/* Amount (right-aligned) */}
+                        <div className="font-medium text-text tabular-nums text-right">
+                          {formatCurrency(net)}
+                        </div>
 
-                          {/* Status Badge */}
-                          <td className="py-2 px-4 whitespace-nowrap">
-                            <StatusBadge status={inv.status} />
-                          </td>
+                        {/* Status badge */}
+                        <div>
+                          <StatusBadge status={inv.status} />
+                        </div>
 
-                          {/* Actions Kebab Menu */}
-                          <td className="py-2 px-4 text-right whitespace-nowrap">
-                            <RowKebabMenu
-                              invoice={inv}
-                              onNavigate={onNavigate}
-                              onDownloadPDF={handleDownloadPDF}
-                              onDuplicate={handleDuplicate}
-                              onCancel={handleCancelInvoice}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                        {/* Kebab menu */}
+                        <div
+                          className="flex justify-end"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <DropdownMenu
+                            ariaLabel={`Actions for invoice ${inv.invoiceNumber || 'draft'}`}
+                            items={getMenuItems(inv)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Mobile Stacked Card View (< md) */}
+              {/* 5e. Mobile Stacked Cards (< md) */}
               <div className="md:hidden divide-y divide-border">
                 {invoices.map((inv) => {
                   const targetId = inv._id || inv.id;
+                  const isDraft = inv.status === 'Draft';
                   const customerName = inv.customer?.name || inv.customerName || 'Walk-in Customer';
                   const net = Number(inv.netTotal ?? inv.grandTotal) || 0;
+                  const handleCardClick = () =>
+                    isDraft
+                      ? onNavigate('edit-invoice', targetId)
+                      : onNavigate('invoice-details', targetId);
 
                   return (
                     <div
                       key={targetId}
-                      onClick={() => onNavigate('invoice-details', targetId)}
-                      className="p-4 space-y-2 hover:bg-bg transition-colors cursor-pointer"
+                      role="button"
+                      tabIndex={0}
+                      onClick={handleCardClick}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleCardClick(); }}
+                      className="p-4 space-y-1.5 hover:bg-surface/50 transition-colors cursor-pointer focus:outline-none focus:bg-surface/50"
                     >
-                      {/* Top: Invoice No. + Status + Actions */}
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-text text-sm">
+                      {/* Top: Invoice no. + Amount + Kebab */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-text text-sm truncate">
                           {inv.invoiceNumber || 'INV-DRAFT'}
                         </span>
-                        <div className="flex items-center gap-2">
-                          <StatusBadge status={inv.status} />
-                          <RowKebabMenu
-                            invoice={inv}
-                            onNavigate={onNavigate}
-                            onDownloadPDF={handleDownloadPDF}
-                            onDuplicate={handleDuplicate}
-                            onCancel={handleCancelInvoice}
-                          />
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-sm font-semibold text-text tabular-nums">
+                            {formatCurrency(net)}
+                          </span>
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenu
+                              ariaLabel={`Actions for invoice ${inv.invoiceNumber || 'draft'}`}
+                              items={getMenuItems(inv)}
+                            />
+                          </div>
                         </div>
                       </div>
 
-                      {/* Customer Name */}
-                      <div className="text-sm font-normal text-muted truncate">
-                        {customerName}
-                      </div>
+                      {/* Customer name */}
+                      <div className="text-xs text-muted truncate">{customerName}</div>
 
-                      {/* Date & Amount */}
-                      <div className="flex items-center justify-between text-xs pt-1 border-t border-border/50">
-                        <span className="text-muted">
+                      {/* Dates + Status */}
+                      <div className="flex items-center justify-between gap-2 text-xs text-muted">
+                        <span>
                           {formatDDMMYYYY(inv.invoiceDate)}
                           {inv.dueDate ? ` · Due ${formatDDMMYYYY(inv.dueDate)}` : ''}
                         </span>
-                        <span className="text-sm font-semibold text-text tabular-nums text-right">
-                          {formatCurrency(net)}
-                        </span>
+                        <StatusBadge status={inv.status} />
                       </div>
                     </div>
                   );
@@ -645,7 +681,41 @@ export function Invoices({ onNavigate: propOnNavigate }) {
           )}
         </div>
 
+        {/* ── 6. Pagination footer (only when total > limit) ──────────────── */}
+        {!loading && total > limit && (
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            limit={limit}
+            onPageChange={setPage}
+            onLimitChange={handleLimitChange}
+            resourceName="invoices"
+            loading={isFetching}
+            className="border-t border-border -mx-4 sm:-mx-6 px-4 sm:px-6"
+          />
+        )}
+
       </div>
+
+      {/* ── Cancel Invoice Confirm Dialog ───────────────────────────────────── */}
+      <ConfirmDialog
+        isOpen={!!cancelTarget}
+        title={`Cancel ${cancelTarget?.invoiceNumber || 'invoice'}?`}
+        description="This invoice will be marked as cancelled. This cannot be undone."
+        confirmLabel="Cancel invoice"
+        cancelLabel="Keep invoice"
+        destructive
+        loading={cancelling}
+        error={cancelError}
+        onConfirm={handleCancelConfirm}
+        onCancel={() => {
+          if (!cancelling) {
+            setCancelTarget(null);
+            setCancelError('');
+          }
+        }}
+      />
     </div>
   );
 }

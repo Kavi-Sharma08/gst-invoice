@@ -6,12 +6,17 @@ import { Button } from '../ui/Button';
 import { Alert } from '../ui/Alert';
 import { INDIAN_STATES, getStateByCode } from '../../gst/taxRules';
 import { validateGSTIN } from '../../gst/validateGSTIN';
+import {
+  CUSTOMER_TYPES,
+  CUSTOMER_TYPE_OPTIONS,
+  normalizeCustomerType
+} from '../../utils/customer';
 
 export function CustomerModal({ isOpen, onClose, onSave, initialData = null }) {
   const [formData, setFormData] = useState({
     name: '',
     gstin: '',
-    customerType: 'B2B',
+    customerType: CUSTOMER_TYPES.REGISTERED,
     address: '',
     state: '',
     email: '',
@@ -27,7 +32,7 @@ export function CustomerModal({ isOpen, onClose, onSave, initialData = null }) {
       setFormData({
         name: initialData.name || '',
         gstin: initialData.gstin || '',
-        customerType: initialData.customerType || (initialData.gstin ? 'B2B' : 'B2C'),
+        customerType: normalizeCustomerType(initialData.customerType || (initialData.gstin ? 'registered' : 'unregistered')),
         address: initialData.address || '',
         state: initialData.state || '',
         email: initialData.email || '',
@@ -42,7 +47,7 @@ export function CustomerModal({ isOpen, onClose, onSave, initialData = null }) {
       setFormData({
         name: '',
         gstin: '',
-        customerType: 'B2B',
+        customerType: CUSTOMER_TYPES.REGISTERED,
         address: '',
         state: '',
         email: '',
@@ -64,7 +69,7 @@ export function CustomerModal({ isOpen, onClose, onSave, initialData = null }) {
       if (result.isValid && result.stateCode) {
         const matchedState = getStateByCode(result.stateCode);
         if (matchedState) {
-          setFormData((prev) => ({ ...prev, state: matchedState.name, customerType: 'B2B' }));
+          setFormData((prev) => ({ ...prev, state: matchedState.name, customerType: CUSTOMER_TYPES.REGISTERED }));
         }
       }
     } else {
@@ -127,10 +132,7 @@ export function CustomerModal({ isOpen, onClose, onSave, initialData = null }) {
             label="Customer Type"
             value={formData.customerType}
             onChange={(e) => setFormData({ ...formData, customerType: e.target.value })}
-            options={[
-              { value: 'B2B', label: 'Registered Business (B2B)' },
-              { value: 'B2C', label: 'Unregistered / Consumer (B2C)' }
-            ]}
+            options={CUSTOMER_TYPE_OPTIONS}
           />
 
           <Select
@@ -144,7 +146,7 @@ export function CustomerModal({ isOpen, onClose, onSave, initialData = null }) {
 
         <div>
           <Input
-            label="GSTIN (Optional for B2C)"
+            label="GSTIN (Optional)"
             placeholder="e.g. 27ABCDE1234F1Z5"
             value={formData.gstin}
             onChange={handleGstinChange}

@@ -17,6 +17,7 @@ const Invoices = lazy(() => import('./pages/Invoices'));
 const CreateInvoice = lazy(() => import('./pages/CreateInvoice'));
 const InvoiceDetails = lazy(() => import('./pages/InvoiceDetails'));
 const Customers = lazy(() => import('./pages/Customers'));
+const CustomerDetails = lazy(() => import('./pages/CustomerDetails'));
 const Products = lazy(() => import('./pages/Products'));
 const Settings = lazy(() => import('./pages/Settings'));
 const SignInPage = lazy(() => import('./pages/SignInPage'));
@@ -47,8 +48,9 @@ function AppShell() {
             <Route path="invoices/:id" element={<InvoiceDetails />} />
             <Route path="invoices/:id/edit" element={<CreateInvoice />} />
             <Route path="customers" element={<Customers />} />
+            <Route path="customers/:id" element={<CustomerDetails />} />
             <Route path="products" element={<Products />} />
-            <Route path="reports" element={<Dashboard />} />
+            <Route path="reports" element={<Navigate to="/app/dashboard" replace />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
           </Routes>

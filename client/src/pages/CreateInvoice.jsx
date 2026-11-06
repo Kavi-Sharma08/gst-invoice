@@ -18,7 +18,7 @@
  */
 
 import React, {
-  useState, useEffect, useRef, useMemo, useCallback
+  useState, useEffect, useRef, useMemo, useCallback, useId
 } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -41,9 +41,49 @@ import { formatCurrency, numberToWords }            from '../utils/currency';
 import { INDIAN_STATES }                            from '../gst/taxRules';
 import { useAppNavigate }                           from '../utils/navigation';
 import { ProductPickerModal }                       from '../components/invoice/ProductPickerModal';
+import { normalizeCustomerType, getCustomerTypeLabel } from '../utils/customer';
+import { useUnsavedChanges, useNavigationBlocker }  from '../utils/useUnsavedChanges';
+import { ConfirmDialog }                            from '../components/ui/ConfirmDialog';
 import {
   Field, Input, Select, Button, SectionHeading, Divider, Textarea
 } from '../components/invoice/InvoiceEditorUI';
+
+// Helper to normalize invoice form values for deep dirty comparison
+function extractInvoiceValues(inv) {
+  if (!inv) return null;
+  return {
+    invoiceNumber: inv.invoiceNumber || '',
+    invoiceDate: inv.invoiceDate || '',
+    dueDate: inv.dueDate || '',
+    selectedCustomerId: String(inv.selectedCustomerId || ''),
+    customerData: {
+      name: inv.customerData?.name || '',
+      gstin: inv.customerData?.gstin || '',
+      customerType: normalizeCustomerType(inv.customerData?.customerType),
+      address: inv.customerData?.address || '',
+      state: inv.customerData?.state || '',
+      phone: inv.customerData?.phone || '',
+      email: inv.customerData?.email || '',
+    },
+    placeOfSupply: inv.placeOfSupply || '',
+    items: (inv.items || []).map(it => ({
+      description: it.description || '',
+      hsnSac: it.hsnSac || '',
+      quantity: String(it.quantity ?? ''),
+      rate: String(it.rate ?? ''),
+      gstRate: Number(it.gstRate || 0),
+    })),
+    notes: inv.notes || '',
+    terms: inv.terms || '',
+    bankDetails: {
+      bankName: inv.bankDetails?.bankName || '',
+      accountNumber: inv.bankDetails?.accountNumber || '',
+      ifscCode: inv.bankDetails?.ifscCode || '',
+      branch: inv.bankDetails?.branch || '',
+      upiId: inv.bankDetails?.upiId || '',
+    },
+  };
+}
 
 // ── Date Helpers (DD/MM/YYYY in UI, ISO in state) ─────────────────────────────
 
@@ -156,7 +196,7 @@ function CustomerCombobox({ value, onChange, onSelectCustomer, customers = [], e
               <div>
                 <div className="font-medium text-text">{c.name}</div>
                 <div className="text-xs text-muted mt-0.5">
-                  {c.gstin ? `GSTIN: ${c.gstin}` : 'Unregistered'}
+                  {c.gstin ? `GSTIN: ${c.gstin}` : getCustomerTypeLabel(c.customerType)}
                   {c.state ? ` · ${c.state}` : ''}
                 </div>
               </div>
@@ -618,12 +658,17 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
   const [saving,             setSaving]            = useState(false);
   const [showPreviewModal,   setShowPreviewModal]  = useState(false);
   const [errors,             setErrors]            = useState({});
-  const [isDirty,            setIsDirty]           = useState(false);
   const [showContactDetails, setShowContactDetails]= useState(false);
   const [showProductPicker,  setShowProductPicker] = useState(false);
   const [noticeDismissed,    setNoticeDismissed]   = useState(false);
   const [customerDrawerOpen, setCustomerDrawerOpen]= useState(false);
   const [customerDrawerName, setCustomerDrawerName]= useState('');
+
+  // Dirty tracking — navigation blocking UX
+  const [isJustSaved,      setIsJustSaved]      = useState(false);
+  const [showLeaveDialog,  setShowLeaveDialog]  = useState(false);
+  const [pendingNavigation,setPendingNavigation]= useState(null);
+  const bypassNavRef = useRef(false); // set to true when user confirms Leave
 
   // Business & DB Data
   const [business,         setBusiness]         = useState(null);
@@ -646,12 +691,46 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
 
   const itemDescriptionRefs = useRef([]);
 
-  // Unsaved changes prompt
+  // ── Deep dirty tracking ────────────────────────────────────────────────────
+  // Build a snapshot of the current form values for comparison
+  const invoiceFormValues = useMemo(() => extractInvoiceValues({
+    invoiceNumber, invoiceDate, dueDate,
+    selectedCustomerId, customerData, placeOfSupply,
+    items, notes, terms, bankDetails,
+  }), [invoiceNumber, invoiceDate, dueDate, selectedCustomerId, customerData,
+       placeOfSupply, items, notes, terms, bankDetails]);
+
+  // baseline is set to null initially; resetBaseline() is called after load
+  const baselineRef = useRef(null);
+  const [baseline, setBaseline] = useState(null);
+
+  const { isDirty, resetBaseline } = useUnsavedChanges(invoiceFormValues, baseline);
+
+  // Navigation blocker — intercepts router push/replace and popstate
+  useNavigationBlocker(
+    isDirty && !saving,
+    (resume) => {
+      setPendingNavigation(() => resume);
+      setShowLeaveDialog(true);
+    },
+    bypassNavRef,
+  );
+
+  // beforeunload — attach only while dirty
   useEffect(() => {
-    const handle = e => { if (isDirty && !saving) { e.preventDefault(); e.returnValue = ''; } };
+    if (!isDirty || saving) return;
+    const handle = e => { e.preventDefault(); e.returnValue = ''; };
     window.addEventListener('beforeunload', handle);
     return () => window.removeEventListener('beforeunload', handle);
   }, [isDirty, saving]);
+
+  // "Saved" indicator auto-dismisses after 2.5 s
+  const savedTimerRef = useRef(null);
+  const markSaved = useCallback(() => {
+    setIsJustSaved(true);
+    clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setIsJustSaved(false), 2500);
+  }, []);
 
   // Load initial data
   useEffect(() => { loadSetupData(); }, [invoiceId, isAuthenticated]);
@@ -676,6 +755,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
       };
       setBusiness(biz); setCustomers(custList); setExistingInvoices(invList); setSettings(sets);
 
+      let loadedValues;
       if (isEditing) {
         const res = await invoicesApi.get(invoiceId);
         const inv = res?.data || null;
@@ -692,13 +772,43 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
           setTerms(inv.terms || '');
           setBankDetails(inv.bankDetails || sets.bankDetails || {});
           if (inv.customer?.email || inv.customer?.phone) setShowContactDetails(true);
+          loadedValues = extractInvoiceValues({
+            invoiceNumber: inv.invoiceNumber || '',
+            invoiceDate: inv.invoiceDate || getTodayInputDate(),
+            dueDate: inv.dueDate || '',
+            selectedCustomerId: inv.customerId ? String(inv.customerId) : '',
+            customerData: inv.customer || {},
+            placeOfSupply: inv.placeOfSupply || inv.customer?.state || '',
+            items: inv.items?.length ? inv.items : [EMPTY_ITEM()],
+            notes: inv.notes || '',
+            terms: inv.terms || '',
+            bankDetails: inv.bankDetails || sets.bankDetails || {},
+          });
         }
       } else {
-        setInvoiceNumber(generateNextInvoiceNumber(sets.invoicePrefix, sets.startingNumber, invList));
-        setNotes(sets.defaultNotes);
-        setTerms(sets.defaultTerms);
-        if (sets.bankDetails) setBankDetails(sets.bankDetails);
+        const invNum  = generateNextInvoiceNumber(sets.invoicePrefix, sets.startingNumber, invList);
+        const defNotes= sets.defaultNotes;
+        const defTerms= sets.defaultTerms;
+        const defBank = sets.bankDetails || {};
+        setInvoiceNumber(invNum);
+        setNotes(defNotes);
+        setTerms(defTerms);
+        if (sets.bankDetails) setBankDetails(defBank);
+        loadedValues = extractInvoiceValues({
+          invoiceNumber: invNum,
+          invoiceDate: getTodayInputDate(),
+          dueDate: '',
+          selectedCustomerId: '',
+          customerData: { name: '', gstin: '', address: '', state: '', phone: '', email: '' },
+          placeOfSupply: '',
+          items: [EMPTY_ITEM()],
+          notes: defNotes,
+          terms: defTerms,
+          bankDetails: defBank,
+        });
       }
+      // Set baseline so the form starts clean after load
+      if (loadedValues) setBaseline(loadedValues);
     } catch (err) {
       console.error(err);
       setErrors({ global: err.message || 'Failed to load editor.' });
@@ -726,16 +836,24 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
 
   // Customer selection
   const handleSelectCustomer = c => {
-    setIsDirty(true);
     setSelectedCustomerId(String(c._id || c.id || ''));
-    setCustomerData({ name: c.name || '', gstin: c.gstin || '', address: c.address || '', state: c.state || '', phone: c.phone || '', email: c.email || '' });
+    const normalizedType = normalizeCustomerType(c.customerType || (c.gstin ? 'registered' : 'unregistered'));
+    setCustomerData({
+      name: c.name || '',
+      gstin: normalizedType === 'registered' ? (c.gstin || '') : '',
+      customerType: normalizedType,
+      address: c.address || '',
+      state: c.state || '',
+      phone: c.phone || '',
+      email: c.email || ''
+    });
     if (c.state) setPlaceOfSupply(c.state);
     if (c.email || c.phone) setShowContactDetails(true);
     setErrors(p => ({ ...p, customerName: null, placeOfSupply: null, gstin: null }));
   };
 
   const handleCustomerNameChange = name => {
-    setIsDirty(true); setSelectedCustomerId('');
+    setSelectedCustomerId('');
     setCustomerData(p => ({ ...p, name }));
     setErrors(p => ({ ...p, customerName: null }));
   };
@@ -758,13 +876,11 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
 
   // Items
   const handleItemChange = useCallback((idx, field, value) => {
-    setIsDirty(true);
     setItems(prev => { const n = [...prev]; n[idx] = { ...n[idx], [field]: value }; return n; });
     setErrors(p => { const c = { ...p }; delete c[`item_${idx}_${field}`]; delete c.items; return c; });
   }, []);
 
   const handleAddItem = () => {
-    setIsDirty(true);
     setItems(prev => {
       const next = [...prev, EMPTY_ITEM()];
       setTimeout(() => { const el = itemDescriptionRefs.current[next.length - 1]; if (el) el.focus(); }, 50);
@@ -774,12 +890,10 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
 
   const handleRemoveItem = idx => {
     if (items.length <= 1) return;
-    setIsDirty(true);
     setItems(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleSelectProduct = prod => {
-    setIsDirty(true);
     const newItem = {
       description: prod.name ? `${prod.name}${prod.description ? `\n${prod.description}` : ''}` : '',
       hsnSac: prod.hsnSac || '', quantity: '1', unit: prod.unit || 'Nos',
@@ -807,7 +921,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
     if (!isDraft) {
       if (!customerData.name?.trim()) errs.customerName = 'Customer name is required.';
       if (!effectivePos)              errs.placeOfSupply = 'Place of supply is required.';
-      if (customerData.gstin?.trim()) {
+      if (customerData.gstin?.trim() && normalizeCustomerType(customerData.customerType) === 'registered') {
         const g = validateGSTIN(customerData.gstin);
         if (!g.isValid) errs.gstin = g.message || 'Invalid GSTIN format.';
       }
@@ -847,7 +961,10 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
       let savedId   = invoiceId;
       if (isEditing) { await invoicesApi.update(invoiceId, payload); }
       else { const res = await invoicesApi.create(payload); savedId = res?.data?._id || res?.data?.id; }
-      setIsDirty(false);
+      // Reset dirty state — navigate only for "Issue"; for "Draft" save stay on page
+      resetBaseline(invoiceFormValues);
+      markSaved();
+      bypassNavRef.current = true;
       onNavigate('invoice-details', savedId);
     } catch (err) {
       console.error(err);
@@ -858,15 +975,22 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
   };
 
   const handleBack = () => {
-    if (isDirty && !window.confirm('Discard unsaved changes?')) return;
-    onNavigate('invoices');
+    if (isDirty) {
+      setPendingNavigation(() => () => onNavigate('invoices'));
+      setShowLeaveDialog(true);
+    } else {
+      onNavigate('invoices');
+    }
   };
 
   const handleDownloadPdf = async () => {
     try {
       const { generateInvoicePDF } = await import('../pdf/generateInvoicePDF');
       generateInvoicePDF(buildPayload(), { action: 'download' });
-    } catch (err) { console.error(err); alert('Failed to generate PDF.'); }
+    } catch (err) {
+      console.error(err);
+      setErrors(p => ({ ...p, global: 'Failed to generate PDF. Please try again.' }));
+    }
   };
 
   if (loading) {
@@ -907,6 +1031,16 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                   <span className="text-[11px] sm:text-xs font-medium px-2 py-0.5 rounded-full bg-border text-muted shrink-0">
                     {status}
                   </span>
+                  {/* Dirty / Saved indicator */}
+                  {isJustSaved ? (
+                    <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium text-success shrink-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-success" />Saved
+                    </span>
+                  ) : isDirty ? (
+                    <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium text-warning shrink-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />Unsaved changes
+                    </span>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -955,7 +1089,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                   placeholder="INV/001"
                   error={errors.invoiceNumber}
                   className="w-full"
-                  onChange={e => { setIsDirty(true); setInvoiceNumber(e.target.value); setErrors(p => ({ ...p, invoiceNumber: null })); }}
+                  onChange={e => { setInvoiceNumber(e.target.value); setErrors(p => ({ ...p, invoiceNumber: null })); }}
                 />
               </div>
               {errors.invoiceNumber && <p className="mt-1 text-xs text-danger">{errors.invoiceNumber}</p>}
@@ -971,7 +1105,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                   value={invoiceDate}
                   error={errors.invoiceDate}
                   className="w-full"
-                  onChange={v => { setIsDirty(true); setInvoiceDate(v); setErrors(p => ({ ...p, invoiceDate: null })); }}
+                  onChange={v => { setInvoiceDate(v); setErrors(p => ({ ...p, invoiceDate: null })); }}
                 />
               </div>
               {errors.invoiceDate && <p className="mt-1 text-xs text-danger">{errors.invoiceDate}</p>}
@@ -987,7 +1121,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                   value={dueDate}
                   placeholder="DD/MM/YYYY"
                   className="w-full"
-                  onChange={v => { setIsDirty(true); setDueDate(v); }}
+                  onChange={v => { setDueDate(v); }}
                 />
               </div>
             </div>
@@ -1067,7 +1201,6 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                       className={!placeOfSupply ? 'text-faint' : 'text-text'}
                       error={Boolean(errors.placeOfSupply)}
                       onChange={e => {
-                        setIsDirty(true);
                         setPlaceOfSupply(e.target.value);
                         setCustomerData(p => ({ ...p, state: e.target.value }));
                         setErrors(p => ({ ...p, placeOfSupply: null }));
@@ -1086,7 +1219,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                     htmlFor="customer-gstin"
                     optional
                     error={errors.gstin}
-                    helper={!errors.gstin && !customerData.gstin ? 'Skip for B2C consumer invoices' : undefined}
+                    helper={!errors.gstin && !customerData.gstin ? 'Skip for unregistered customers' : undefined}
                   >
                     <Input
                       id="customer-gstin"
@@ -1096,7 +1229,6 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                       placeholder="27AAAAA0000A1Z5"
                       error={errors.gstin}
                       onChange={e => {
-                        setIsDirty(true);
                         setCustomerData(p => ({ ...p, gstin: e.target.value.toUpperCase() }));
                         setErrors(p => ({ ...p, gstin: null }));
                       }}
@@ -1110,7 +1242,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                       rows={2}
                       value={customerData.address}
                       placeholder="Street, City, PIN"
-                      onChange={e => { setIsDirty(true); setCustomerData(p => ({ ...p, address: e.target.value })); }}
+                      onChange={e => { setCustomerData(p => ({ ...p, address: e.target.value })); }}
                     />
                   </Field>
                 </div>
@@ -1133,7 +1265,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                           type="email"
                           value={customerData.email || ''}
                           placeholder="billing@customer.com"
-                          onChange={e => { setIsDirty(true); setCustomerData(p => ({ ...p, email: e.target.value })); }}
+                          onChange={e => { setCustomerData(p => ({ ...p, email: e.target.value })); }}
                         />
                       </Field>
                       <Field label="Phone" htmlFor="customer-phone" optional>
@@ -1142,7 +1274,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                           type="tel"
                           value={customerData.phone || ''}
                           placeholder="+91 98765 43210"
-                          onChange={e => { setIsDirty(true); setCustomerData(p => ({ ...p, phone: e.target.value })); }}
+                          onChange={e => { setCustomerData(p => ({ ...p, phone: e.target.value })); }}
                         />
                       </Field>
                     </div>
@@ -1215,7 +1347,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                   rows={2}
                   value={notes}
                   placeholder="Thank you for your business! (optional)"
-                  onChange={e => { setIsDirty(true); setNotes(e.target.value); }}
+                  onChange={e => { setNotes(e.target.value); }}
                 />
               </div>
 
@@ -1282,6 +1414,26 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
         onClose={() => setCustomerDrawerOpen(false)}
         onSave={handleSavedQuickCustomer}
         prefillName={customerDrawerName}
+      />
+
+      {/* ══ LEAVE WITHOUT SAVING DIALOG ══════════════════════════════════════ */}
+      <ConfirmDialog
+        isOpen={showLeaveDialog}
+        title="Leave without saving?"
+        description="Your changes to this invoice will be lost."
+        confirmLabel="Leave"
+        cancelLabel="Keep editing"
+        destructive
+        onConfirm={() => {
+          setShowLeaveDialog(false);
+          bypassNavRef.current = true;
+          pendingNavigation?.();
+          setPendingNavigation(null);
+        }}
+        onCancel={() => {
+          setShowLeaveDialog(false);
+          setPendingNavigation(null);
+        }}
       />
     </div>
   );

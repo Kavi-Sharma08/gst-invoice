@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { formatCurrency, numberToWords } from '../../utils/currency';
 import { formatDate } from '../../utils/date';
 import { getStateByName, getStateByCode } from '../../gst/taxRules';
+import { getCustomerTypeLabel } from '../../utils/customer';
 
 export function InvoicePreviewModal({ isOpen, onClose, invoice }) {
   if (!isOpen || !invoice) return null;
@@ -151,7 +152,7 @@ export function InvoicePreviewModal({ isOpen, onClose, invoice }) {
                   <span className="font-bold">GSTIN:</span> {customer.gstin}
                 </p>
               ) : (
-                <p className="text-[11px] text-slate-500 mt-0.5">Tax Status: Unregistered Consumer (B2C)</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Tax Status: {getCustomerTypeLabel(customer.customerType)}</p>
               )}
               {customer.address && (
                 <p className="text-slate-600 mt-1 whitespace-pre-line leading-relaxed">

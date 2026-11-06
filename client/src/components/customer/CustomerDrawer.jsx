@@ -13,29 +13,30 @@
 import React, {
   useState, useEffect, useRef, useCallback, useId
 } from 'react';
-import { X, ChevronDown, Check, Loader2, AlertCircle, Plus } from 'lucide-react';
+import { X, ChevronDown, Loader2, AlertCircle, Plus } from 'lucide-react';
 import {
   Field, Input, Select, Button, Textarea
 } from '../invoice/InvoiceEditorUI';
 import { INDIAN_STATES, getStateByCode } from '../../gst/taxRules';
 import { validateGSTIN } from '../../gst/validateGSTIN';
+import {
+  CUSTOMER_TYPES,
+  CUSTOMER_TYPE_OPTIONS,
+  normalizeCustomerType,
+} from '../../utils/customer';
+import { useUnsavedChanges } from '../../utils/useUnsavedChanges';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const EMPTY_FORM = () => ({
   name: '',
-  customerType: 'B2B',   // 'B2B' | 'B2C' | 'Unregistered'
+  customerType: CUSTOMER_TYPES.REGISTERED,   // 'registered' | 'unregistered'
   gstin: '',
   state: '',
   email: '',
   phone: '',
   address: '',
 });
-
-/** Returns true if any field has user input */
-function isDirty(form) {
-  return Object.values(form).some(v => String(v).trim().length > 0);
-}
 
 // ─── Segmented control (Customer Type) ────────────────────────────────────────
 function SegmentedControl({ value, onChange, options }) {
@@ -68,13 +69,6 @@ function SegmentedControl({ value, onChange, options }) {
   );
 }
 
-// ─── Customer Type options ─────────────────────────────────────────────────────
-const CUSTOMER_TYPE_OPTIONS = [
-  { value: 'B2B',         label: 'Registered' },
-  { value: 'B2C',         label: 'Consumer'   },
-  { value: 'Unregistered', label: 'Unregistered' },
-];
-
 // ─── Main Drawer ───────────────────────────────────────────────────────────────
 export function CustomerDrawer({
   isOpen,
@@ -85,66 +79,108 @@ export function CustomerDrawer({
 }) {
   const isEditing = Boolean(initialData);
 
-  const [form,       setForm]      = useState(EMPTY_FORM());
+  const [form,               setForm]              = useState(EMPTY_FORM());
+  const [initialBaseline,    setInitialBaseline]   = useState(EMPTY_FORM());
+  const { isDirty, resetBaseline }                 = useUnsavedChanges(form, initialBaseline);
+  const [confirmingDiscard,  setConfirmingDiscard] = useState(false);
+
   const [errors,     setErrors]    = useState({});
   const [saving,     setSaving]    = useState(false);
   const [saveError,  setSaveError] = useState('');
   const [gstinValid, setGstinValid]= useState(null); // null | {isValid, message}
   const [showContact, setShowContact] = useState(false);
 
-  const nameRef    = useRef(null);
-  const drawerRef  = useRef(null);
-  const titleId    = useId();
+  const nameRef          = useRef(null);
+  const keepEditingBtnRef= useRef(null);
+  const drawerRef        = useRef(null);
+  const titleId          = useId();
 
-  // ── Populate / reset on open ───────────────────────────────────────────────
+  // ── Populate / reset baseline on open ──────────────────────────────────────
   useEffect(() => {
     if (isOpen) {
+      setConfirmingDiscard(false);
+      let f;
       if (initialData) {
-        const f = {
+        const normalizedType = normalizeCustomerType(
+          initialData.customerType || (initialData.gstin ? 'registered' : 'unregistered')
+        );
+        f = {
           name:         initialData.name         || '',
-          customerType: initialData.customerType ||
-                        (initialData.gstin ? 'B2B' : 'B2C'),
-          gstin:        initialData.gstin        || '',
+          customerType: normalizedType,
+          gstin:        normalizedType === CUSTOMER_TYPES.REGISTERED ? (initialData.gstin || '') : '',
           state:        initialData.state        || '',
           email:        initialData.email        || '',
           phone:        initialData.phone        || '',
           address:      initialData.address      || '',
         };
-        setForm(f);
         setShowContact(!!(f.email || f.phone));
-        if (f.gstin) {
+        if (f.gstin && normalizedType === CUSTOMER_TYPES.REGISTERED) {
           setGstinValid(validateGSTIN(f.gstin));
+        } else {
+          setGstinValid(null);
         }
       } else {
-        const f = { ...EMPTY_FORM(), name: prefillName || '' };
-        setForm(f);
+        f = { ...EMPTY_FORM(), name: prefillName || '' };
         setShowContact(false);
         setGstinValid(null);
       }
+      setForm(f);
+      setInitialBaseline(f);
+      // NOTE: do NOT call resetBaseline here — setInitialBaseline already syncs
+      // the baseline via the initialValues watch in useUnsavedChanges, and calling
+      // resetBaseline (which depends on `form`) inside this effect creates an
+      // infinite update loop.
       setErrors({});
       setSaveError('');
       setSaving(false);
       // Autofocus name
       setTimeout(() => nameRef.current?.focus(), 60);
     }
-  }, [isOpen, initialData, prefillName]);
+  }, [isOpen, initialData, prefillName]);  // resetBaseline intentionally omitted
 
-  // ── ESC key ────────────────────────────────────────────────────────────────
+  // ── Close handler with dirty check ─────────────────────────────────────────
+  const attemptClose = useCallback(() => {
+    if (!isDirty) {
+      setConfirmingDiscard(false);
+      onClose();
+    } else {
+      setConfirmingDiscard(true);
+    }
+  }, [isDirty, onClose]);
+
+  // ── Autofocus "Keep editing" when confirming discard ───────────────────────
+  useEffect(() => {
+    if (confirmingDiscard) {
+      const timer = setTimeout(() => {
+        keepEditingBtnRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [confirmingDiscard]);
+
+  // ── ESC key handling ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) return;
     const onKey = e => {
-      if (e.key === 'Escape') attemptClose();
+      if (e.key === 'Escape') {
+        if (confirmingDiscard) {
+          // Esc while confirming means "Keep editing"
+          setConfirmingDiscard(false);
+        } else {
+          attemptClose();
+        }
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, form]);
+  }, [isOpen, confirmingDiscard, attemptClose]);
 
   // ── Body scroll lock ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
+    return () => { document.body.style.overflow = originalOverflow; };
   }, [isOpen]);
 
   // ── Focus trap ─────────────────────────────────────────────────────────────
@@ -178,6 +214,21 @@ export function CustomerDrawer({
     setErrors(p => { const c = { ...p }; delete c[field]; return c; });
   };
 
+  // ── Customer type handling ────────────────────────────────────────────────
+  const handleCustomerTypeChange = (newType) => {
+    setForm(prev => ({
+      ...prev,
+      customerType: newType,
+      gstin: '',
+    }));
+    setGstinValid(null);
+    setErrors(prev => {
+      const next = { ...prev };
+      delete next.gstin;
+      return next;
+    });
+  };
+
   // ── GSTIN handling ─────────────────────────────────────────────────────────
   const handleGstinChange = e => {
     const val = e.target.value.toUpperCase().slice(0, 15);
@@ -194,7 +245,7 @@ export function CustomerDrawer({
       if (matched && !form.state) {
         set('state', matched.name);
       }
-      set('customerType', 'B2B');
+      set('customerType', CUSTOMER_TYPES.REGISTERED);
     }
     if (!res.isValid) {
       setErrors(p => ({ ...p, gstin: res.message }));
@@ -207,7 +258,7 @@ export function CustomerDrawer({
   const validate = () => {
     const errs = {};
     if (!form.name.trim()) errs.name = 'Customer name is required.';
-    if (form.customerType === 'B2B') {
+    if (form.customerType === CUSTOMER_TYPES.REGISTERED) {
       if (form.gstin.trim()) {
         const res = validateGSTIN(form.gstin);
         if (!res.isValid) errs.gstin = res.message;
@@ -233,14 +284,15 @@ export function CustomerDrawer({
       const payload = {
         name:         form.name.trim(),
         customerType: form.customerType,
-        gstin:        form.customerType === 'B2B' ? form.gstin.trim() : '',
+        gstin:        form.customerType === CUSTOMER_TYPES.REGISTERED ? form.gstin.trim() : '',
         state:        form.state,
         email:        form.email.trim(),
         phone:        form.phone.trim(),
         address:      form.address.trim(),
       };
       const saved = await onSave(payload);
-      return saved; // caller might use this
+      resetBaseline(form);
+      return saved;
     } catch (err) {
       setSaveError(err.message || 'Failed to save customer. Please try again.');
     } finally {
@@ -248,19 +300,11 @@ export function CustomerDrawer({
     }
   };
 
-  // ── Close with dirty-check ─────────────────────────────────────────────────
-  const attemptClose = useCallback(() => {
-    if (isDirty(form) && !isEditing) {
-      if (!window.confirm('Discard unsaved customer details?')) return;
-    }
-    onClose();
-  }, [form, isEditing, onClose]);
-
   if (!isOpen) return null;
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — on dirty form, clicking triggers inline confirm rather than closing */}
       <div
         className="fixed inset-0 z-40 bg-black/50 transition-opacity"
         aria-hidden="true"
@@ -331,13 +375,18 @@ export function CustomerDrawer({
               </label>
               <SegmentedControl
                 value={form.customerType}
-                onChange={v => set('customerType', v)}
+                onChange={handleCustomerTypeChange}
                 options={CUSTOMER_TYPE_OPTIONS}
               />
+              <p className="text-xs text-muted mt-1 leading-normal">
+                {form.customerType === CUSTOMER_TYPES.REGISTERED
+                  ? 'Has a GSTIN and can claim tax credit.'
+                  : 'No GSTIN. Individuals and unregistered businesses.'}
+              </p>
             </div>
 
-            {/* GSTIN — shown only for Registered (B2B) */}
-            {form.customerType === 'B2B' && (
+            {/* GSTIN — shown only for Registered */}
+            {form.customerType === CUSTOMER_TYPES.REGISTERED && (
               <Field
                 label="GSTIN"
                 htmlFor="gstin"
@@ -469,37 +518,68 @@ export function CustomerDrawer({
 
         </form>
 
-        {/* ── Sticky footer ────────────────────────────────────────────────── */}
-        <div className="shrink-0 flex items-center justify-end gap-3 px-5 py-4 border-t border-border bg-surface">
-          <Button
-            type="button"
-            variant="secondary"
-            size="md"
-            onClick={attemptClose}
-            disabled={saving}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            form="customer-drawer-form"
-            variant="primary"
-            size="md"
-            disabled={saving}
-            className="min-w-[130px]"
-          >
-            {saving ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Saving…
-              </>
-            ) : isEditing ? 'Update customer' : 'Save customer'}
-          </Button>
-        </div>
+        {/* ── Sticky footer: Normal vs Inline Confirm ────────────────────────── */}
+        {confirmingDiscard ? (
+          <div className="shrink-0 flex items-center justify-between gap-3 px-5 py-3.5 border-t border-border bg-surface">
+            <span className="text-xs font-semibold text-text">
+              Discard changes?
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                ref={keepEditingBtnRef}
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setConfirmingDiscard(false)}
+                className="h-8 px-3 text-xs"
+              >
+                Keep editing
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                onClick={() => {
+                  setConfirmingDiscard(false);
+                  onClose();
+                }}
+                className="h-8 px-3 text-xs"
+              >
+                Discard
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="shrink-0 flex items-center justify-end gap-3 px-5 py-4 border-t border-border bg-surface">
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              onClick={attemptClose}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="customer-drawer-form"
+              variant="primary"
+              size="md"
+              disabled={saving}
+              className="min-w-[130px]"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving…
+                </>
+              ) : isEditing ? 'Update customer' : 'Save customer'}
+            </Button>
+          </div>
+        )}
       </div>
     </>
   );
 }
 
 export default CustomerDrawer;
-

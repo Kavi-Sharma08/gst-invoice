@@ -1,6 +1,7 @@
 import React from 'react';
 import { formatCurrency, numberToWords } from '../../utils/currency';
 import { formatDate } from '../../utils/date';
+import { getCustomerTypeLabel } from '../../utils/customer';
 import { ShieldCheck, Building2, CheckCircle2 } from 'lucide-react';
 
 /**
@@ -93,7 +94,7 @@ export function LiveInvoiceSheet({
               <span className="text-slate-400">GSTIN: </span>{cust.gstin}
             </div>
           ) : (
-            <div className="text-slate-400 text-[10px]">Unregistered / Consumer (B2C)</div>
+            <div className="text-slate-400 text-[10px]">{getCustomerTypeLabel(cust.customerType)}</div>
           )}
           {cust.address && <div className="text-slate-500 line-clamp-2">{cust.address}</div>}
           <div className="text-slate-600">
