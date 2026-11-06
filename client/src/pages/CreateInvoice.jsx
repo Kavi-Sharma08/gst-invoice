@@ -738,14 +738,14 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
   const loadSetupData = async () => {
     try {
       setLoading(true);
-      const [bRes, cRes, iRes] = await Promise.all([
+      const [bRes, cRes, numRes] = await Promise.all([
         businessApi.get(),
         customersApi.list({ limit: 100 }),
-        invoicesApi.list({ limit: 100 }),
+        invoicesApi.getNextNumber(),
       ]);
       const biz      = bRes?.data || null;
       const custList = Array.isArray(cRes?.data) ? cRes.data : (cRes?.data?.customers || []);
-      const invList  = Array.isArray(iRes?.data) ? iRes.data : (iRes?.data?.invoices  || []);
+      const nextNum  = numRes?.data?.nextInvoiceNumber || 'INV/26-27/001';
       const sets = {
         invoicePrefix:  biz?.invoiceSettings?.invoicePrefix  || 'INV/',
         startingNumber: biz?.invoiceSettings?.startingNumber || 1,
@@ -753,7 +753,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
         defaultTerms:   biz?.invoiceSettings?.defaultTerms   || 'Payment due within 15 days.',
         bankDetails:    biz?.bankDetails || {},
       };
-      setBusiness(biz); setCustomers(custList); setExistingInvoices(invList); setSettings(sets);
+      setBusiness(biz); setCustomers(custList); setExistingInvoices([]); setSettings(sets);
 
       let loadedValues;
       if (isEditing) {
@@ -786,7 +786,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
           });
         }
       } else {
-        const invNum  = generateNextInvoiceNumber(sets.invoicePrefix, sets.startingNumber, invList);
+        const invNum  = nextNum;
         const defNotes= sets.defaultNotes;
         const defTerms= sets.defaultTerms;
         const defBank = sets.bankDetails || {};
@@ -949,26 +949,42 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
   // Actions
   const handleSave = async targetStatus => {
     if (!validateForm(targetStatus === 'Draft')) return;
-    const finalNum = invoiceNumber.trim();
-    if (isDuplicateInvoiceNumber(finalNum, invoiceId, existingInvoices)) {
-      setErrors({ invoiceNumber: `"${finalNum}" already exists.` });
-      document.getElementById('invoice-number')?.focus();
-      return;
-    }
     try {
       setSaving(true);
+      setErrors({});
       const payload = buildPayload(targetStatus);
       let savedId   = invoiceId;
-      if (isEditing) { await invoicesApi.update(invoiceId, payload); }
-      else { const res = await invoicesApi.create(payload); savedId = res?.data?._id || res?.data?.id; }
-      // Reset dirty state — navigate only for "Issue"; for "Draft" save stay on page
+
+      if (isEditing) {
+        await invoicesApi.updateDraft(invoiceId, payload);
+      } else {
+        const res = await invoicesApi.createDraft(payload);
+        savedId = res?.data?._id || res?.data?.id;
+      }
+
+      // If issuing, call atomic issue endpoint to assign number and lock
+      if (targetStatus === 'Issued') {
+        await invoicesApi.issue(savedId);
+      }
+
+      // Reset dirty state — navigate to details
       resetBaseline(invoiceFormValues);
       markSaved();
       bypassNavRef.current = true;
       onNavigate('invoice-details', savedId);
     } catch (err) {
-      console.error(err);
-      setErrors({ global: err.message || 'Failed to save invoice.' });
+      console.error('Invoice save failed:', err);
+      if (err.fields && typeof err.fields === 'object' && Object.keys(err.fields).length > 0) {
+        // Map 422 and 400 server validation errors directly to form fields
+        setErrors(err.fields);
+        const firstKey = Object.keys(err.fields)[0];
+        if (firstKey) {
+          const el = document.getElementById(firstKey.replace(/\./g, '-')) || document.getElementById(firstKey);
+          el?.focus();
+        }
+      } else {
+        setErrors({ global: err.message || 'Failed to save invoice.' });
+      }
     } finally {
       setSaving(false);
     }

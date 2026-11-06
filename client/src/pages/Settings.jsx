@@ -113,7 +113,7 @@ export function Settings() {
       ]);
 
       const biz = bizRes?.data || null;
-      const invTotal = invRes?.data?.total ?? (invRes?.data?.invoices?.length || 0);
+      const invTotal = invRes?.meta?.total ?? invRes?.data?.total ?? (Array.isArray(invRes?.data) ? invRes.data.length : (invRes?.data?.invoices?.length || 0));
       setInvoicesIssued(invTotal > 0);
 
       const loaded = {

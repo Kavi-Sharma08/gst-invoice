@@ -140,7 +140,7 @@ export function Customers({ onNavigate: propOnNavigate }) {
 
       const [cRes, iRes] = await Promise.all([
         customersApi.list({ page, limit, search: debouncedSearch }),
-        invoicesApi.list({ limit: 500 }),
+        invoicesApi.list({ limit: 500, expand: true }),
       ]);
 
       const data = cRes?.data || {};

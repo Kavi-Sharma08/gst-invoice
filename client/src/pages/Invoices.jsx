@@ -14,6 +14,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Plus,
   Search,
@@ -28,7 +29,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
-import { invoicesApi } from '../api/invoices.api';
+import { invoicesApi, invoiceQueryKeys } from '../api/invoices.api';
 import { formatCurrency } from '../utils/currency';
 import { useDebounce } from '../utils/useDebounce';
 import { useAppNavigate } from '../utils/navigation';
@@ -110,7 +111,9 @@ const STATUS_TABS = [
 export function Invoices({ onNavigate: propOnNavigate }) {
   const appNavigate = useAppNavigate();
   const onNavigate = propOnNavigate || appNavigate;
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoaded, isSignedIn } = useAuth();
+  const queryClient = useQueryClient();
+  const isAuthReady = Boolean(isLoaded && isSignedIn);
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -129,24 +132,11 @@ export function Invoices({ onNavigate: propOnNavigate }) {
   );
   const debouncedSearch = useDebounce(search, 300);
 
-  // Data state
-  const [invoices, setInvoices] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [isFetching, setIsFetching] = useState(false);
-  const [error, setError] = useState(null);
-
-  // Status counts (from full unfiltered load)
-  const [statusCounts, setStatusCounts] = useState({
-    ALL: 0, Paid: 0, Issued: 0, Draft: 0, Cancelled: 0,
-  });
-
   // Cancel confirm dialog
   const [cancelTarget, setCancelTarget] = useState(null); // invoice object
-  const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState('');
 
-  // Sync URL when state changes
+  // 1. URL Sync (updates URL without refetch loop)
   useEffect(() => {
     const params = {};
     if (page > 1) params.page = String(page);
@@ -154,45 +144,79 @@ export function Invoices({ onNavigate: propOnNavigate }) {
     if (debouncedSearch) params.q = debouncedSearch;
     if (statusFilter !== 'ALL') params.status = statusFilter.toLowerCase();
     setSearchParams(params, { replace: true });
-  }, [page, limit, debouncedSearch, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, limit, debouncedSearch, statusFilter, setSearchParams]);
 
-  const loadInvoices = useCallback(async () => {
-    try {
-      setIsFetching(true);
-      setError(null);
-      const params = { page, limit };
-      if (debouncedSearch) params.search = debouncedSearch;
-      if (statusFilter !== 'ALL') params.status = statusFilter;
+  // 2. Query 1: Paginated invoice list (keeps previous page data while paginating)
+  const listParams = useMemo(() => ({
+    page,
+    limit,
+    status: statusFilter !== 'ALL' ? statusFilter : undefined,
+    q: debouncedSearch || undefined,
+  }), [page, limit, statusFilter, debouncedSearch]);
 
-      const res = await invoicesApi.list(params);
-      const data = res?.data;
-      const list = Array.isArray(data) ? data : (data?.invoices || []);
-      const totalCount = data?.total ?? list.length;
+  const {
+    data: listResponse,
+    isLoading: loading,
+    isFetching,
+    error: queryError,
+    refetch: loadInvoices,
+  } = useQuery({
+    queryKey: invoiceQueryKeys.list(listParams),
+    queryFn: () => invoicesApi.list(listParams),
+    placeholderData: keepPreviousData,
+    enabled: isAuthReady,
+  });
 
-      setInvoices(list);
-      setTotal(totalCount);
+  const invoices = useMemo(() => {
+    const raw = listResponse?.data;
+    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw?.invoices)) return raw.invoices;
+    return [];
+  }, [listResponse]);
 
-      // Update status counts when viewing full unfiltered list
-      if (statusFilter === 'ALL' && !debouncedSearch) {
-        const counts = { ALL: totalCount, Paid: 0, Issued: 0, Draft: 0, Cancelled: 0 };
-        list.forEach((inv) => {
-          if (counts[inv.status] !== undefined) counts[inv.status]++;
-        });
-        setStatusCounts(counts);
-      }
-    } catch (err) {
-      console.error('Failed to load invoices:', err);
-      setError(err.message || 'Failed to load invoices. Please check your connection.');
-    } finally {
-      setLoading(false);
-      setIsFetching(false);
-    }
-  }, [page, limit, debouncedSearch, statusFilter]);
+  const total = useMemo(() => {
+    return listResponse?.meta?.total ?? listResponse?.data?.total ?? invoices.length;
+  }, [listResponse, invoices.length]);
 
-  useEffect(() => {
-    setLoading(true);
-    loadInvoices();
-  }, [loadInvoices, isAuthenticated]);
+  const error = queryError?.message || null;
+
+  // 3. Query 2: Status counts (parallel request, respects q but NOT status)
+  const countsParams = useMemo(() => ({
+    q: debouncedSearch || undefined,
+  }), [debouncedSearch]);
+
+  const { data: countsResponse } = useQuery({
+    queryKey: invoiceQueryKeys.counts(countsParams),
+    queryFn: () => invoicesApi.getCounts(countsParams),
+    enabled: isAuthReady,
+  });
+
+  const statusCounts = useMemo(() => {
+    const c = countsResponse?.data || {};
+    return {
+      ALL: c.all ?? total,
+      Paid: c.paid ?? 0,
+      Issued: c.issued ?? 0,
+      Draft: c.draft ?? 0,
+      Cancelled: c.cancelled ?? 0,
+    };
+  }, [countsResponse, total]);
+
+  // 4. Query 3: Totals summary for stat strip (parallel request)
+  const { data: summaryResponse } = useQuery({
+    queryKey: invoiceQueryKeys.summary('all'),
+    queryFn: () => invoicesApi.getSummary(),
+    enabled: isAuthReady,
+  });
+
+  const summary = useMemo(() => {
+    const s = summaryResponse?.data || {};
+    return {
+      total: s.totalBilled ?? 0,
+      paid: s.paid ?? 0,
+      outstanding: s.outstanding ?? 0,
+    };
+  }, [summaryResponse]);
 
   // Reset to page 1 when filters/search change
   const handleStatusChange = (id) => {
@@ -210,7 +234,7 @@ export function Invoices({ onNavigate: propOnNavigate }) {
     setPage(1);
   };
 
-  // ── Invoice actions ────────────────────────────────────────────────────────
+  // ── Invoice actions / Mutations ──────────────────────────────────────────
   const handleDownloadPDF = async (invoice) => {
     try {
       const { generateInvoicePDF } = await import('../pdf/generateInvoicePDF');
@@ -220,31 +244,46 @@ export function Invoices({ onNavigate: propOnNavigate }) {
     }
   };
 
-  const handleDuplicate = async (invoice) => {
-    try {
-      const targetId = invoice._id || invoice.id;
-      const res = await invoicesApi.duplicate(targetId);
-      const newId = res?.data?._id || res?.data?.id;
+  const duplicateMutation = useMutation({
+    mutationFn: (id) => invoicesApi.duplicate(id),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: invoiceQueryKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ['invoices', 'counts'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices', 'summary'] });
+      const newId = res?.data?.id || res?.data?._id;
       if (newId) onNavigate('edit-invoice', newId);
-    } catch (err) {
+    },
+    onError: (err) => {
       console.error('Failed to duplicate invoice:', err);
-    }
+    },
+  });
+
+  const handleDuplicate = (invoice) => {
+    const targetId = invoice._id || invoice.id;
+    if (targetId) duplicateMutation.mutate(targetId);
   };
 
-  const handleCancelConfirm = async () => {
+  const cancelMutation = useMutation({
+    mutationFn: (id) => invoicesApi.cancel(id),
+    onSuccess: (res, id) => {
+      queryClient.invalidateQueries({ queryKey: invoiceQueryKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ['invoices', 'counts'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices', 'summary'] });
+      queryClient.invalidateQueries({ queryKey: invoiceQueryKeys.detail(id) });
+      setCancelTarget(null);
+    },
+    onError: (err) => {
+      setCancelError(err.message || 'Failed to cancel invoice.');
+    },
+  });
+
+  const cancelling = cancelMutation.isPending;
+
+  const handleCancelConfirm = () => {
     if (!cancelTarget) return;
     const targetId = cancelTarget._id || cancelTarget.id;
-    try {
-      setCancelling(true);
-      setCancelError('');
-      await invoicesApi.update(targetId, { status: 'Cancelled' });
-      setCancelTarget(null);
-      loadInvoices();
-    } catch (err) {
-      setCancelError(err.message || 'Failed to cancel invoice.');
-    } finally {
-      setCancelling(false);
-    }
+    setCancelError('');
+    cancelMutation.mutate(targetId);
   };
 
   // ── Build kebab menu items per invoice ────────────────────────────────────
@@ -296,22 +335,6 @@ export function Invoices({ onNavigate: propOnNavigate }) {
 
     return items;
   };
-
-  // ── Summary metrics from current page of invoices ─────────────────────────
-  const summary = useMemo(() => {
-    let totalAmt = 0;
-    let paid = 0;
-    let outstanding = 0;
-
-    invoices.forEach((inv) => {
-      const amt = Number(inv.netTotal ?? inv.grandTotal) || 0;
-      if (inv.status !== 'Cancelled') totalAmt += amt;
-      if (inv.status === 'Paid') paid += amt;
-      else if (inv.status !== 'Cancelled') outstanding += amt;
-    });
-
-    return { total: totalAmt, paid, outstanding };
-  }, [invoices]);
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const hasFilters = !!debouncedSearch || statusFilter !== 'ALL';

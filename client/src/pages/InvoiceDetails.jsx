@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Download,
@@ -20,9 +21,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { InvoiceStatusBadge } from '../components/ui/Badge';
 import { useAuth } from '../context/AuthContext';
-import { invoicesApi } from '../api/invoices.api';
-
-
+import { invoicesApi, invoiceQueryKeys } from '../api/invoices.api';
 
 import { formatDate } from '../utils/date';
 import { getStateByName, getStateByCode } from '../gst/taxRules';
@@ -36,9 +35,8 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
   const appNavigate = useAppNavigate();
   const onNavigate = propOnNavigate || appNavigate;
   const invoiceId = propInvoiceId || params.id;
-  const { isAuthenticated } = useAuth();
-  const [invoice, setInvoice] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { isAuthenticated, isLoaded, isSignedIn } = useAuth();
+  const queryClient = useQueryClient();
 
   // Email modal and delivery status state
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
@@ -53,60 +51,52 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
   const [deliveryStatus, setDeliveryStatus] = useState(null);
   const pollingRef = useRef(null);
 
-  const [error, setError] = useState(null);
+  // TanStack Query for full invoice details
+  const {
+    data: invoiceRes,
+    isLoading: loading,
+    error: queryError
+  } = useQuery({
+    queryKey: invoiceQueryKeys.detail(invoiceId),
+    queryFn: () => invoicesApi.get(invoiceId),
+    enabled: Boolean(isLoaded && isSignedIn && invoiceId)
+  });
 
+  const invoice = invoiceRes?.data || null;
+  const error = queryError?.message || (loading ? null : (invoice ? null : 'Invoice not found.'));
+
+  // Sync emailForm and deliveryStatus when invoice loads
   useEffect(() => {
-    loadInvoice();
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, [invoiceId, isAuthenticated]);
+    if (invoice) {
+      setEmailForm({
+        recipientEmail: invoice.customer?.email || '',
+        recipientName: invoice.customer?.name || '',
+        subject: `Invoice ${invoice.invoiceNumber || 'Draft'} from ${invoice.business?.businessName || 'Business'}`,
+        message: `Dear ${invoice.customer?.name || 'Customer'},\n\nPlease find attached details for Tax Invoice ${invoice.invoiceNumber || 'Draft'}.\nTotal Amount: ₹${Number(invoice.netTotal ?? invoice.grandTotal ?? 0).toFixed(2)}.\n\nThank you for your business!`
+      });
 
-  const loadInvoice = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await invoicesApi.get(invoiceId);
-      const data = res?.data || null;
-
-      if (!data) {
-        setError('Invoice not found.');
-      }
-      setInvoice(data);
-
-      if (data) {
-        setEmailForm({
-          recipientEmail: data.customer?.email || '',
-          recipientName: data.customer?.name || '',
-          subject: `Invoice ${data.invoiceNumber} from ${data.business?.businessName || 'Business'}`,
-          message: `Dear ${data.customer?.name || 'Customer'},\n\nPlease find attached details for Tax Invoice ${data.invoiceNumber}.\nTotal Amount: ₹${Number(data.netTotal ?? data.grandTotal).toFixed(2)}.\n\nThank you for your business!`
+      if (invoice.emailDeliveryStatus && invoice.emailDeliveryStatus !== 'NOT_QUEUED') {
+        setDeliveryStatus({
+          status: invoice.emailDeliveryStatus,
+          recipientEmail: invoice.emailLastSentTo,
+          sentAt: invoice.emailLastSentAt
         });
-
-        // Initialize delivery status if available on model
-        if (data.emailDeliveryStatus && data.emailDeliveryStatus !== 'NOT_QUEUED') {
-          setDeliveryStatus({
-            status: data.emailDeliveryStatus,
-            recipientEmail: data.emailLastSentTo,
-            sentAt: data.emailLastSentAt
-          });
-          if (['PENDING', 'PROCESSING', 'RETRY_SCHEDULED'].includes(data.emailDeliveryStatus)) {
-            startPollingStatus(invoiceId);
-          }
-        }
       }
-    } catch (err) {
-      console.error('Failed to load invoice:', err);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [invoice]);
 
-  const startPollingStatus = (id) => {
-    if (pollingRef.current) clearInterval(pollingRef.current);
+  // Tab-visibility-aware polling for email delivery
+  useEffect(() => {
+    const isPending = deliveryStatus && ['PENDING', 'PROCESSING', 'RETRY_SCHEDULED'].includes(deliveryStatus.status);
+    if (!isPending || !invoiceId) {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      return;
+    }
 
-    pollingRef.current = setInterval(async () => {
+    const poll = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       try {
-        const res = await invoicesApi.getEmailStatus(id);
+        const res = await invoicesApi.getEmailStatus(invoiceId);
         const job = res?.data;
         if (job) {
           setDeliveryStatus(job);
@@ -118,8 +108,64 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
       } catch (err) {
         console.warn('Failed to poll email status:', err);
       }
-    }, 4000);
+    };
+
+    pollingRef.current = setInterval(poll, 4000);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [deliveryStatus?.status, invoiceId]);
+
+  // Mutations
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: invoiceQueryKeys.lists() });
+    queryClient.invalidateQueries({ queryKey: ['invoices', 'counts'] });
+    queryClient.invalidateQueries({ queryKey: ['invoices', 'summary'] });
+    queryClient.invalidateQueries({ queryKey: invoiceQueryKeys.detail(invoiceId) });
   };
+
+  const markPaidMutation = useMutation({
+    mutationFn: (id) => invoicesApi.markPaid(id),
+    onSuccess: invalidateAll,
+    onError: (err) => alert(err.message || 'Failed to mark as paid')
+  });
+
+  const markUnpaidMutation = useMutation({
+    mutationFn: (id) => invoicesApi.markUnpaid(id),
+    onSuccess: invalidateAll,
+    onError: (err) => alert(err.message || 'Failed to mark as unpaid')
+  });
+
+  const issueMutation = useMutation({
+    mutationFn: (id) => invoicesApi.issue(id),
+    onSuccess: invalidateAll,
+    onError: (err) => alert(err.message || 'Failed to issue invoice')
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id) => invoicesApi.cancel(id),
+    onSuccess: invalidateAll,
+    onError: (err) => alert(err.message || 'Failed to cancel invoice')
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: (id) => invoicesApi.duplicate(id),
+    onSuccess: (res) => {
+      invalidateAll();
+      const newId = res?.data?.id || res?.data?._id;
+      if (newId) onNavigate('edit-invoice', newId);
+    },
+    onError: (err) => alert(err.message || 'Failed to duplicate invoice')
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => invoicesApi.deleteDraft(id),
+    onSuccess: () => {
+      invalidateAll();
+      onNavigate('invoices');
+    },
+    onError: (err) => alert(err.message || 'Failed to delete invoice')
+  });
 
   const handleDownloadPDF = async () => {
     if (!invoice) return;
@@ -136,39 +182,37 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
     window.print();
   };
 
-  const handleStatusToggle = async () => {
+  const handleStatusAction = () => {
     if (!invoice) return;
     const targetId = invoice._id || invoice.id;
-    const newStatus = invoice.status === 'Paid' ? 'Issued' : 'Paid';
-
-    try {
-      await invoicesApi.update(targetId, { status: newStatus });
-      setInvoice({ ...invoice, status: newStatus });
-    } catch {
-      alert('Failed to update status');
+    if (invoice.status === 'Draft') {
+      issueMutation.mutate(targetId);
+    } else if (invoice.status === 'Paid') {
+      markUnpaidMutation.mutate(targetId);
+    } else if (invoice.status === 'Issued') {
+      markPaidMutation.mutate(targetId);
     }
   };
 
-  const handleDuplicate = async () => {
-    try {
-      const targetId = invoice._id || invoice.id;
-      const res = await invoicesApi.duplicate(targetId);
-      const newId = res?.data?._id || res?.data?.id;
-      onNavigate('edit-invoice', newId);
-    } catch (err) {
-      alert(err.message || 'Failed to duplicate invoice');
+  const handleCancel = () => {
+    if (!invoice) return;
+    const targetId = invoice._id || invoice.id;
+    if (window.confirm(`Are you sure you want to cancel invoice ${invoice.invoiceNumber}? This action cannot be undone.`)) {
+      cancelMutation.mutate(targetId);
     }
   };
 
-  const handleDelete = async () => {
-    if (window.confirm(`Are you sure you want to delete invoice ${invoice.invoiceNumber}?`)) {
-      try {
-        const targetId = invoice._id || invoice.id;
-        await invoicesApi.delete(targetId);
-        onNavigate('invoices');
-      } catch (err) {
-        alert(err.message || 'Failed to delete invoice');
-      }
+  const handleDuplicate = () => {
+    if (!invoice) return;
+    const targetId = invoice._id || invoice.id;
+    duplicateMutation.mutate(targetId);
+  };
+
+  const handleDelete = () => {
+    if (!invoice) return;
+    const targetId = invoice._id || invoice.id;
+    if (window.confirm('Are you sure you want to delete this draft invoice?')) {
+      deleteMutation.mutate(targetId);
     }
   };
 
@@ -267,30 +311,52 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
               Send Email
             </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleStatusToggle}
-              className="text-xs"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-              {invoice.status === 'Paid' ? 'Mark Unpaid' : 'Mark Paid'}
-            </Button>
+            {/* Status action button */}
+            {invoice.status !== 'Cancelled' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleStatusAction}
+                disabled={markPaidMutation.isPending || markUnpaidMutation.isPending || issueMutation.isPending}
+                className="text-xs"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                {invoice.status === 'Draft' ? 'Issue Invoice' : invoice.status === 'Paid' ? 'Mark Unpaid' : 'Mark Paid'}
+              </Button>
+            )}
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onNavigate('edit-invoice', invoice._id || invoice.id)}
-              className="text-xs"
-            >
-              <Edit3 className="w-3.5 h-3.5 mr-1" />
-              Edit
-            </Button>
+            {/* Cancel button (allowed only from Issued) */}
+            {invoice.status === 'Issued' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancel}
+                disabled={cancelMutation.isPending}
+                className="text-xs text-rose-600 hover:bg-rose-50 border-rose-200"
+              >
+                <XCircle className="w-3.5 h-3.5 mr-1" />
+                Cancel
+              </Button>
+            )}
+
+            {/* Edit button (Drafts only) */}
+            {invoice.status === 'Draft' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onNavigate('edit-invoice', invoice._id || invoice.id)}
+                className="text-xs"
+              >
+                <Edit3 className="w-3.5 h-3.5 mr-1" />
+                Edit
+              </Button>
+            )}
 
             <Button
               variant="outline"
               size="sm"
               onClick={handleDuplicate}
+              disabled={duplicateMutation.isPending}
               className="text-xs"
             >
               <Copy className="w-3.5 h-3.5 mr-1" />
@@ -316,15 +382,19 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
               Download PDF
             </Button>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleDelete}
-              className="text-xs text-rose-600 hover:bg-rose-50"
-              title="Delete Invoice"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </Button>
+            {/* Delete button (Drafts only) */}
+            {invoice.status === 'Draft' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+                className="text-xs text-rose-600 hover:bg-rose-50"
+                title="Delete draft invoice"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            )}
           </div>
         }
       />

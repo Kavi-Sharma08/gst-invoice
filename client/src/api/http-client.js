@@ -1,11 +1,23 @@
 /**
  * Centralized API HTTP client.
  * Attaches Clerk session tokens as Bearer auth headers,
- * normalizes errors, and handles timeouts.
+ * normalizes responses to standard { data, meta } shape while preserving
+ * backwards compatibility for { success, data }, and provides typed ApiError.
  */
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 const TIMEOUT_MS = 15000;
+
+export class ApiError extends Error {
+  constructor(message, status = 500, code = 'API_ERROR', fields = null, details = null) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.fields = fields || null;
+    this.details = details || null;
+  }
+}
 
 /**
  * Retrieves the current Clerk session token.
@@ -16,12 +28,10 @@ async function getClerkToken() {
   try {
     if (typeof window === 'undefined') return null;
 
-    // If Clerk is already ready with a session, return token immediately
     if (window.Clerk?.session) {
       return await window.Clerk.session.getToken();
     }
 
-    // If Clerk is mounting, wait briefly (up to 1.5 seconds) for session to resolve
     if (window.Clerk && !window.Clerk.loaded) {
       await new Promise((resolve) => {
         let attempts = 0;
@@ -71,25 +81,44 @@ async function request(path, options = {}) {
 
     clearTimeout(timeoutId);
 
-    if (response.status === 204) return null;
+    if (response.status === 204) return { data: null, meta: null };
 
-    const data = await response.json();
+    const raw = await response.json();
 
     if (!response.ok) {
-      const error = new Error(data?.error?.message || `HTTP ${response.status}`);
-      error.code = data?.error?.code;
-      error.details = data?.error?.details;
-      error.status = response.status;
-      throw error;
+      const err = raw?.error || raw || {};
+      const message = err.message || (typeof err === 'string' ? err : `HTTP ${response.status}`);
+      const code = err.code || 'API_ERROR';
+      const fields = err.fields || null;
+      const details = err.details || null;
+      throw new ApiError(message, response.status, code, fields, details);
     }
 
-    return data;
+    // Standardize response to { data, meta } while maintaining backwards compatibility
+    const data = raw.data !== undefined ? raw.data : raw;
+    let meta = raw.meta !== undefined ? raw.meta : null;
+
+    // If legacy list format { data: { items: [...], total, page, limit } }
+    if (!meta && data && typeof data === 'object' && !Array.isArray(data)) {
+      if (typeof data.total === 'number') {
+        meta = {
+          total: data.total,
+          page: data.page ?? 1,
+          limit: data.limit ?? 10
+        };
+      }
+    }
+
+    return {
+      success: raw.success !== undefined ? raw.success : true,
+      data,
+      meta,
+      ...raw
+    };
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      const timeoutErr = new Error('Request timed out. Please check your connection.');
-      timeoutErr.code = 'TIMEOUT';
-      throw timeoutErr;
+      throw new ApiError('Request timed out. Please check your connection.', 408, 'TIMEOUT');
     }
     throw err;
   }
@@ -113,6 +142,11 @@ export const apiClient = {
   post: (path, body) =>
     request(path, {
       method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  put: (path, body) =>
+    request(path, {
+      method: 'PUT',
       body: JSON.stringify(body)
     }),
   patch: (path, body) =>

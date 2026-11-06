@@ -73,22 +73,29 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
+  const [serverStats, setServerStats] = useState(null);
+
   const loadData = useCallback(async () => {
     if (!id) return;
     try {
       setLoading(true);
       setError(null);
 
-      const [cRes, iRes] = await Promise.all([
+      const [cRes, iRes, sRes] = await Promise.all([
         customersApi.get(id),
-        invoicesApi.list({ limit: 500 }),
+        invoicesApi.list({ customerId: id, limit: 100 }),
+        invoicesApi.getSummary(id),
       ]);
 
       const cust = cRes?.data || null;
       const allInvoices = Array.isArray(iRes?.data) ? iRes.data : (iRes?.data?.invoices || []);
+      const summaryData = sRes?.data || null;
 
       setCustomer(cust);
       setInvoices(allInvoices);
+      if (summaryData) {
+        setServerStats(summaryData);
+      }
     } catch (err) {
       console.error('Failed to load customer details:', err);
       setError(err.message || 'Failed to load customer details.');
@@ -123,8 +130,16 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
     return customerInvoices.filter((inv) => inv.status === statusFilter);
   }, [customerInvoices, statusFilter]);
 
-  // Stats computed on frontend from customer's invoices
+  // Stats: use authoritative server summary if available, fallback to list sum
   const stats = useMemo(() => {
+    if (serverStats) {
+      return {
+        totalBilled: serverStats.totalBilled ?? 0,
+        paid: serverStats.paid ?? 0,
+        outstanding: serverStats.outstanding ?? 0,
+      };
+    }
+
     let totalBilled = 0;
     let paid = 0;
     let outstanding = 0;
@@ -146,7 +161,7 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
       paid,
       outstanding,
     };
-  }, [customerInvoices]);
+  }, [serverStats, customerInvoices]);
 
   // Drawer save handler
   const handleSaveCustomer = async (formData) => {
@@ -206,7 +221,7 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
   const handleCancelInvoice = async (invoice) => {
     const targetId = invoice._id || invoice.id;
     try {
-      await invoicesApi.update(targetId, { status: 'Cancelled' });
+      await invoicesApi.cancel(targetId);
       loadData();
     } catch (err) {
       console.error('Failed to cancel invoice:', err);
