@@ -1,8 +1,9 @@
 import { getAuth } from '@clerk/express';
 import { AppError } from '../shared/errors/app-error.js';
 import { env } from '../config/env.js';
+import { logger } from '../infrastructure/logging/logger.js';
 
-function decodeJwtPayload(token) {
+function decodeJwtPayloadUnsafe(token) {
   try {
     const parts = token.split('.');
     if (parts.length < 2) return null;
@@ -16,24 +17,28 @@ function decodeJwtPayload(token) {
 /**
  * Clerk authentication middleware.
  * Verifies Clerk session tokens and binds the authenticated Clerk user ID to req.user.id and req.auth.
+ *
+ * In production (NODE_ENV === 'production'):
+ * Strictly enforces cryptographically verified Clerk sessions via getAuth(req).
+ * No fallbacks or unverified decoding are allowed under any circumstances.
  */
 export function authenticate(req, res, next) {
-  // Support testing bypass when in test environment with test user header
+  // 1. Support automated testing bypass when in test environment with test user header
   if (env.NODE_ENV === 'test' && req.headers['x-test-user-id']) {
     req.user = {
-      id: req.headers['x-test-user-id'],
+      id: String(req.headers['x-test-user-id']),
       sessionId: 'test_session'
     };
-    req.auth = { userId: req.headers['x-test-user-id'] };
+    req.auth = { userId: String(req.headers['x-test-user-id']) };
     return next();
   }
 
-  // 1. Check if Clerk's express middleware has already resolved an authenticated session
+  // 2. Verified Clerk authentication session (primary production path)
   let auth = null;
   try {
     auth = getAuth(req);
   } catch {
-    // getAuth throws if clerkMiddleware was not active
+    // getAuth throws if clerkMiddleware was not initialized
   }
 
   if (auth && auth.userId) {
@@ -46,30 +51,39 @@ export function authenticate(req, res, next) {
     return next();
   }
 
-  // 2. Fallback: Parse Bearer token from Authorization header (e.g. In local development or client API calls)
-  const authHeader = req.headers.authorization || req.headers.Authorization;
-  if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7).trim();
-    const payload = decodeJwtPayload(token);
+  // 3. Explicit dev-only bypass: ONLY allowed when NODE_ENV === 'development' AND Clerk keys are placeholders
+  const isDevWithPlaceholderKeys =
+    env.NODE_ENV === 'development' &&
+    (!env.CLERK_SECRET_KEY || env.CLERK_SECRET_KEY.includes('placeholder'));
 
-    if (payload && (payload.sub || payload.userId)) {
-      const userId = payload.sub || payload.userId;
-      const sessionId = payload.sid || 'session';
-      req.user = {
-        id: userId,
-        sessionId,
-        claims: payload
-      };
-      req.auth = {
-        userId,
-        sessionId,
-        sessionClaims: payload
-      };
-      return next();
+  if (isDevWithPlaceholderKeys) {
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7).trim();
+      const payload = decodeJwtPayloadUnsafe(token);
+
+      if (payload && (payload.sub || payload.userId)) {
+        const userId = payload.sub || payload.userId;
+        const sessionId = payload.sid || 'dev_session';
+        req.user = {
+          id: userId,
+          sessionId,
+          claims: payload
+        };
+        req.auth = {
+          userId,
+          sessionId,
+          sessionClaims: payload
+        };
+        logger.warn('[SECURITY] Using dev-only unverified token decoding. Forbidden in production.', {
+          userId
+        });
+        return next();
+      }
     }
   }
 
-  // 3. Reject unauthenticated requests with 401 Unauthorized
+  // 4. Reject unauthenticated requests with 401 Unauthorized
   return next(
     new AppError(
       'Authentication required. Missing, invalid, or expired Clerk session token.',

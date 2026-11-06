@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import * as productController from './products.controller.js';
 import { authenticate } from '../../middleware/authenticate.js';
-import { validate } from '../../middleware/validate.js';
+import { validate, validateObjectId } from '../../middleware/validate.js';
 import { productSchema, productUpdateSchema } from './products.schema.js';
 
 const router = Router();
 
 router.use(authenticate);
+router.param('id', validateObjectId('id'));
 
 router.get('/', productController.list);
 router.post('/', validate(productSchema), productController.create);

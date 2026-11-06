@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import * as customerController from './customers.controller.js';
 import { authenticate } from '../../middleware/authenticate.js';
-import { validate } from '../../middleware/validate.js';
+import { validate, validateObjectId } from '../../middleware/validate.js';
 import { customerSchema, customerUpdateSchema } from './customers.schema.js';
 
 const router = Router();
 
 router.use(authenticate);
+router.param('id', validateObjectId('id'));
 
 router.get('/', customerController.list);
 router.post('/', validate(customerSchema), customerController.create);

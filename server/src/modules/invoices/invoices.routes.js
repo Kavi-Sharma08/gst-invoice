@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import * as invoiceController from './invoices.controller.js';
 import { authenticate } from '../../middleware/authenticate.js';
-import { validate } from '../../middleware/validate.js';
+import { validate, validateObjectId } from '../../middleware/validate.js';
 import { invoiceCreateSchema, invoiceUpdateSchema } from './invoices.schema.js';
 import { emailRoutes } from '../invoice-emails/invoice-emails.routes.js';
 
 const router = Router();
 
 router.use(authenticate);
+router.param('id', validateObjectId('id'));
 
 router.get('/', invoiceController.list);
 router.post('/', validate(invoiceCreateSchema), invoiceController.create);
