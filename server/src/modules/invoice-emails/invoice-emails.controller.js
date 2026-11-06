@@ -1,5 +1,6 @@
 import { asyncHandler } from '../../shared/http/async-handler.js';
 import * as emailService from './invoice-emails.service.js';
+import { sendItem } from '../../shared/http/response.js';
 
 /**
  * POST /api/v1/invoices/:id/email
@@ -15,11 +16,7 @@ export const sendEmail = asyncHandler(async (req, res) => {
     recipientName
   );
 
-  res.status(202).json({
-    success: true,
-    message: 'Email delivery has been queued and will be processed shortly.',
-    data: job
-  });
+  return sendItem(res, job, 202);
 });
 
 /**
@@ -28,5 +25,5 @@ export const sendEmail = asyncHandler(async (req, res) => {
  */
 export const getEmailStatus = asyncHandler(async (req, res) => {
   const status = await emailService.getEmailStatus(req.user.id, req.params.id);
-  res.status(200).json({ success: true, data: status });
+  return sendItem(res, status, 200);
 });

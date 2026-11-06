@@ -1,4 +1,5 @@
 import { InvoiceCounter } from './invoice-counter.model.js';
+import { AppError } from '../../shared/errors/app-error.js';
 
 /**
  * Returns current Indian Financial Year string (e.g. "26-27").
@@ -14,6 +15,38 @@ export function getCurrentFinancialYear() {
   return `${startCode}-${endCode}`;
 }
 
+export function getDefaultPrefix() {
+  return `INV/${getCurrentFinancialYear()}/`;
+}
+
+/**
+ * Previews the next sequential invoice number without consuming the counter.
+ * @param {string} userId
+ * @param {string} [prefix]
+ * @param {number} [startingNumber=1]
+ * @returns {Promise<string>}
+ */
+export async function getPreviewNextInvoiceNumber(userId, prefix, startingNumber = 1) {
+  const cleanPrefix = (prefix && prefix.trim()) || getDefaultPrefix();
+  const startNum = Math.max(1, Number(startingNumber) || 1);
+
+  const counter = await InvoiceCounter.findOne({ userId, prefix: cleanPrefix });
+  const nextSeq = counter ? Math.max(counter.seq + 1, startNum) : startNum;
+
+  const padded = String(nextSeq).padStart(3, '0');
+  const invoiceNumber = `${cleanPrefix}${padded}`;
+
+  if (invoiceNumber.length > 16) {
+    throw new AppError(
+      `Invoice number "${invoiceNumber}" exceeds the statutory 16-character limit (${invoiceNumber.length} chars). Adjust prefix or numbering.`,
+      422,
+      'INVOICE_NUMBER_EXCEEDS_LIMIT'
+    );
+  }
+
+  return invoiceNumber;
+}
+
 /**
  * Atomically increments and returns the next sequential invoice number for a given prefix.
  * Guaranteed race-free under high concurrency.
@@ -23,7 +56,8 @@ export function getCurrentFinancialYear() {
  * @returns {Promise<string>}
  */
 export async function allocateNextInvoiceNumber(userId, prefix, startingNumber = 1) {
-  const cleanPrefix = prefix || `INV/${getCurrentFinancialYear()}/`;
+  const cleanPrefix = (prefix && prefix.trim()) || getDefaultPrefix();
+  const startNum = Math.max(1, Number(startingNumber) || 1);
 
   const counter = await InvoiceCounter.findOneAndUpdate(
     { userId, prefix: cleanPrefix },
@@ -32,11 +66,11 @@ export async function allocateNextInvoiceNumber(userId, prefix, startingNumber =
   );
 
   let seqNum = counter.seq;
-  if (seqNum < startingNumber) {
-    // If startingNumber is set higher, align counter
+  if (seqNum < startNum) {
+    // If startingNumber was set higher than initial seq, align counter
     const updated = await InvoiceCounter.findOneAndUpdate(
-      { userId, prefix: cleanPrefix, seq: { $lt: startingNumber } },
-      { $set: { seq: startingNumber } },
+      { userId, prefix: cleanPrefix, seq: { $lt: startNum } },
+      { $set: { seq: startNum } },
       { new: true }
     );
     if (updated) {
@@ -45,5 +79,15 @@ export async function allocateNextInvoiceNumber(userId, prefix, startingNumber =
   }
 
   const padded = String(seqNum).padStart(3, '0');
-  return `${cleanPrefix}${padded}`;
+  const invoiceNumber = `${cleanPrefix}${padded}`;
+
+  if (invoiceNumber.length > 16) {
+    throw new AppError(
+      `Allocated invoice number "${invoiceNumber}" exceeds the statutory 16-character limit (${invoiceNumber.length} chars).`,
+      422,
+      'INVOICE_NUMBER_EXCEEDS_LIMIT'
+    );
+  }
+
+  return invoiceNumber;
 }

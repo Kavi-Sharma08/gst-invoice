@@ -67,12 +67,12 @@ const invoiceSchema = new mongoose.Schema(
     },
     invoiceNumber: {
       type: String,
-      required: [true, 'Invoice number is required'],
-      trim: true
+      trim: true,
+      default: ''
     },
     invoiceDate: {
       type: String,
-      required: [true, 'Invoice date is required']
+      default: () => new Date().toISOString().slice(0, 10)
     },
     dueDate: {
       type: String,
@@ -81,7 +81,7 @@ const invoiceSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ['Draft', 'Issued', 'Paid', 'Cancelled'],
-      default: 'Issued'
+      default: 'Draft'
     },
     currency: {
       type: String,
@@ -146,8 +146,19 @@ const invoiceSchema = new mongoose.Schema(
   }
 );
 
-invoiceSchema.index({ userId: 1, invoiceNumber: 1 }, { unique: true });
+// Unique partial index: Only non-draft invoices with an invoiceNumber are constrained to be unique
+invoiceSchema.index(
+  { userId: 1, invoiceNumber: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: { $ne: 'Draft' },
+      invoiceNumber: { $type: 'string', $gt: '' }
+    }
+  }
+);
+invoiceSchema.index({ userId: 1, status: 1, invoiceDate: -1 });
+invoiceSchema.index({ userId: 1, customerId: 1 });
 invoiceSchema.index({ userId: 1, invoiceDate: -1 });
-invoiceSchema.index({ userId: 1, status: 1 });
 
 export const Invoice = mongoose.models.Invoice || mongoose.model('Invoice', invoiceSchema);

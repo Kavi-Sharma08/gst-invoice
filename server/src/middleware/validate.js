@@ -14,7 +14,14 @@ export function validate(schema, target = 'body') {
         path: err.path.join('.'),
         message: err.message
       }));
-      return next(new AppError('Validation failed', 400, 'VALIDATION_ERROR', details));
+      const fields = {};
+      result.error.errors.forEach((err) => {
+        const key = err.path.join('.');
+        if (key && !fields[key]) {
+          fields[key] = err.message;
+        }
+      });
+      return next(new AppError('Validation failed', 400, 'VALIDATION_ERROR', details, fields));
     }
     req[target] = result.data;
     next();

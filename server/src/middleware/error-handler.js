@@ -46,7 +46,8 @@ export function errorHandler(err, req, res, next) {
     error: {
       code: errorCode,
       message,
-      details: error.details || undefined
+      details: error.details || undefined,
+      fields: error.fields || undefined
     }
   });
 }
