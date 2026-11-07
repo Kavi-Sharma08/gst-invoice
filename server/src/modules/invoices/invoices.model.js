@@ -134,10 +134,10 @@ const invoiceSchema = new mongoose.Schema(
     timestamps: true,
     toJSON: {
       transform: (doc, ret) => {
-        ret.id = ret._id.toString();
-        ret.userId = ret.userId.toString();
-        if (ret.businessProfileId) ret.businessProfileId = ret.businessProfileId.toString();
-        if (ret.customerId) ret.customerId = ret.customerId.toString();
+        if (ret._id != null) ret.id = ret._id.toString();
+        if (ret.userId != null) ret.userId = ret.userId.toString();
+        if (ret.businessProfileId != null) ret.businessProfileId = ret.businessProfileId.toString();
+        if (ret.customerId != null) ret.customerId = ret.customerId.toString();
         delete ret._id;
         delete ret.__v;
         return ret;
@@ -146,15 +146,17 @@ const invoiceSchema = new mongoose.Schema(
   }
 );
 
-// Unique partial index: Only non-draft invoices with an invoiceNumber are constrained to be unique
+// Unique partial index: invoiceNumber uniqueness per user, only for non-empty values.
+// MongoDB does not support $ne in partialFilterExpression, so we use $gt: '' alone.
+// Drafts always have invoiceNumber='' so they are excluded automatically.
 invoiceSchema.index(
   { userId: 1, invoiceNumber: 1 },
   {
     unique: true,
     partialFilterExpression: {
-      status: { $ne: 'Draft' },
       invoiceNumber: { $type: 'string', $gt: '' }
-    }
+    },
+    name: 'userId_1_invoiceNumber_1_unique_nonempty'
   }
 );
 invoiceSchema.index({ userId: 1, status: 1, invoiceDate: -1 });

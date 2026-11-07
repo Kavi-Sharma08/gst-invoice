@@ -1,13 +1,14 @@
 import { Invoice } from './invoices.model.js';
 import { BusinessProfile } from '../business/business.model.js';
+import { getOwnedCustomer } from '../customers/customers.service.js';
 import { determineTaxType, calculateInvoiceTotal, getStateByCode } from './invoice-calculation.service.js';
 import { allocateNextInvoiceNumber } from './invoice-number.service.js';
 import { AppError } from '../../shared/errors/app-error.js';
+import { escapeRegex } from '../../shared/utils/regex.js';
 
-export function escapeRegex(string) {
-  if (!string || typeof string !== 'string') return '';
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+// Re-export so existing tests that import escapeRegex from invoices.service continue to work
+export { escapeRegex };
+
 
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
@@ -62,6 +63,7 @@ export async function listInvoices(
     ? null
     : {
         _id: 1,
+        userId: 1,
         invoiceNumber: 1,
         status: 1,
         customerId: 1,
@@ -197,6 +199,17 @@ export async function createDraftInvoice(userId, data) {
   const business = await BusinessProfile.findOne({ userId });
   const sellerState = business?.state || '';
 
+  // Security: verify customerId belongs to this user — prevents cross-tenant snapshot copying
+  if (data.customerId) {
+    const ownedCustomer = await getOwnedCustomer(userId, String(data.customerId));
+    if (!ownedCustomer) {
+      throw new AppError('Customer not found or access denied.', 404, 'CUSTOMER_NOT_FOUND');
+    }
+    if (ownedCustomer.isArchived) {
+      throw new AppError('Cannot create an invoice for an archived customer.', 422, 'CUSTOMER_ARCHIVED');
+    }
+  }
+
   const customerState = data.placeOfSupply || data.customer?.state || sellerState;
   const taxType = determineTaxType(sellerState, customerState);
 
@@ -267,6 +280,17 @@ export async function updateDraftInvoice(userId, invoiceId, data) {
       409,
       'INVOICE_NOT_DRAFT'
     );
+  }
+
+  // Security: verify customerId belongs to this user when it changes
+  if (data.customerId) {
+    const ownedCustomer = await getOwnedCustomer(userId, String(data.customerId));
+    if (!ownedCustomer) {
+      throw new AppError('Customer not found or access denied.', 404, 'CUSTOMER_NOT_FOUND');
+    }
+    if (ownedCustomer.isArchived) {
+      throw new AppError('Cannot assign an archived customer to an invoice.', 422, 'CUSTOMER_ARCHIVED');
+    }
   }
 
   const business = await BusinessProfile.findOne({ userId });

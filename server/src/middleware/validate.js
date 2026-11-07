@@ -23,7 +23,15 @@ export function validate(schema, target = 'body') {
       });
       return next(new AppError('Validation failed', 400, 'VALIDATION_ERROR', details, fields));
     }
-    req[target] = result.data;
+    // req.query and req.params are read-only getters in some Node/router versions;
+    // mutate their properties in-place rather than replacing the reference.
+    if (target === 'body') {
+      req.body = result.data;
+    } else {
+      // Clear existing keys then copy parsed (coerced/defaulted) values in-place
+      Object.keys(req[target]).forEach((k) => { delete req[target][k]; });
+      Object.assign(req[target], result.data);
+    }
     next();
   };
 }

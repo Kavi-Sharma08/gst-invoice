@@ -19,14 +19,16 @@ const customerSchema = new mongoose.Schema(
       uppercase: true,
       default: ''
     },
+    // Canonical values: 'registered' | 'unregistered'
     customerType: {
       type: String,
-      enum: ['B2B', 'B2C'],
-      default: 'B2B'
+      enum: ['registered', 'unregistered'],
+      default: 'registered'
     },
     address: {
       type: String,
       trim: true,
+      maxlength: 500,
       default: ''
     },
     state: {
@@ -44,14 +46,23 @@ const customerSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: ''
+    },
+    isArchived: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    archivedAt: {
+      type: Date,
+      default: null
     }
   },
   {
     timestamps: true,
     toJSON: {
       transform: (doc, ret) => {
-        ret.id = ret._id.toString();
-        ret.userId = ret.userId.toString();
+        if (ret._id != null) ret.id = ret._id.toString();
+        if (ret.userId != null) ret.userId = ret.userId.toString();
         delete ret._id;
         delete ret.__v;
         return ret;
@@ -60,7 +71,20 @@ const customerSchema = new mongoose.Schema(
   }
 );
 
-customerSchema.index({ userId: 1, name: 1 });
+// Compound indexes for efficient queries
+customerSchema.index({ userId: 1, isArchived: 1, name: 1 });
 customerSchema.index({ userId: 1, gstin: 1 });
+
+// Unique partial index: only enforce GSTIN uniqueness per user when GSTIN is non-empty
+customerSchema.index(
+  { userId: 1, gstin: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      gstin: { $type: 'string', $gt: '' }
+    },
+    name: 'userId_1_gstin_1_unique_nonempty'
+  }
+);
 
 export const Customer = mongoose.models.Customer || mongoose.model('Customer', customerSchema);

@@ -60,3 +60,4 @@ if (process.argv[1]?.endsWith('check-invoice-index.js')) {
       process.exit(1);
     });
 }
+

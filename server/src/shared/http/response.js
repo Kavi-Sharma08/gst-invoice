@@ -22,7 +22,7 @@ export function sendList(res, items, meta = {}, statusCode = 200) {
   });
 }
 
-export function sendError(res, code, message, statusCode = 400, fields = undefined) {
+export function sendError(res, code, message, statusCode = 400, fields = undefined, details = undefined) {
   const errorObj = {
     code: String(code),
     message: String(message)
@@ -30,5 +30,9 @@ export function sendError(res, code, message, statusCode = 400, fields = undefin
   if (fields && typeof fields === 'object') {
     errorObj.fields = fields;
   }
+  if (details && typeof details === 'object') {
+    errorObj.details = details;
+  }
   return res.status(statusCode).json({ error: errorObj });
 }
+
