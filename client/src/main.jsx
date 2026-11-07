@@ -8,6 +8,11 @@ import App from './App.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const PROXY_URL =
+  import.meta.env.VITE_CLERK_PROXY_URL ||
+  (typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')
+    ? `https://${window.location.hostname}/__clerk`
+    : undefined);
 
 if (!PUBLISHABLE_KEY) {
   throw new Error('Missing Vite environment variable: VITE_CLERK_PUBLISHABLE_KEY');
@@ -25,7 +30,7 @@ export const queryClient = new QueryClient({
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY} proxyUrl={PROXY_URL}>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <AuthProvider>
