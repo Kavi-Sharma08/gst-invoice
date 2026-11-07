@@ -10,12 +10,19 @@
  *  - Footer rendered only when total > limit; sticky bottom-0 bg-bg border-t.
  *  - Horizontal padding matches table rows (px-4).
  *  - Rows-per-page selector (10, 25, 50) stored in URL (?limit=25).
- *  - GSTIN green shield removed.
- *  - Warning icon shown when GSTIN state code differs from saved state.
+ *  - Active / Archived segmented filter stored in URL (?archived=true|false).
+ *  - TanStack Query with keepPreviousData, enabled on isLoaded && isSignedIn.
+ *  - Delete dialog uses server invoiceCount; offers Archive if customer has invoices.
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData
+} from '@tanstack/react-query';
 import {
   Plus,
   Search,
@@ -25,7 +32,9 @@ import {
   Eye,
   X,
   AlertTriangle,
-  AlertCircle
+  AlertCircle,
+  Archive,
+  ArchiveRestore
 } from 'lucide-react';
 
 import { Button } from '../components/invoice/InvoiceEditorUI';
@@ -36,15 +45,15 @@ import { Pagination } from '../components/ui/Pagination';
 import { PageHeader } from '../components/layout/PageHeader';
 
 import { useAuth } from '../context/AuthContext';
-import { customersApi } from '../api/customers.api';
-import { invoicesApi } from '../api/invoices.api';
+import { customersApi, customerQueryKeys } from '../api/customers.api';
 import { useDebounce } from '../utils/useDebounce';
 import { useAppNavigate } from '../utils/navigation';
 import { getCustomerTypeLabel } from '../utils/customer';
 import { getStateByCode } from '../gst/taxRules';
 
 // Exact unified grid template for desktop header and rows: 48px actions column right-aligned
-const CUSTOMERS_GRID_CLASS = 'grid grid-cols-[minmax(0,2.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_48px] gap-4 px-4 items-center';
+const CUSTOMERS_GRID_CLASS =
+  'grid grid-cols-[minmax(0,2.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_48px] gap-4 px-4 items-center';
 
 // Helper to check if GSTIN state code differs from customer state
 function checkStateMismatch(c) {
@@ -56,32 +65,26 @@ function checkStateMismatch(c) {
 }
 
 export function Customers({ onNavigate: propOnNavigate }) {
-  const { isAuthenticated } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
+  const isAuthReady = Boolean(isLoaded && isSignedIn);
+  const queryClient = useQueryClient();
   const appNavigate = useAppNavigate();
   const onNavigate = propOnNavigate || appNavigate;
 
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Read initial page, limit and q from URL query params
+  // Read initial params from URL
   const paramPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
   const parsedLimit = parseInt(searchParams.get('limit') || '10', 10) || 10;
   const paramLimit = [10, 25, 50].includes(parsedLimit) ? parsedLimit : 10;
   const paramQ = searchParams.get('q') || '';
+  const paramArchived = searchParams.get('archived') === 'true';
 
   const [page, setPage] = useState(paramPage);
   const [limit, setLimit] = useState(paramLimit);
   const [search, setSearch] = useState(paramQ);
+  const [isArchivedTab, setIsArchivedTab] = useState(paramArchived);
   const debouncedSearch = useDebounce(search, 300);
-
-  // Customers data & pagination state
-  const [customers, setCustomers] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [isFetching, setIsFetching] = useState(false);
-  const [error, setError] = useState(null);
-
-  // Cached invoices index for delete dialog check
-  const [invoices, setInvoices] = useState([]);
 
   // Drawer & Dialog states
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -89,7 +92,6 @@ export function Customers({ onNavigate: propOnNavigate }) {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
   const listTopRef = useRef(null);
@@ -99,95 +101,129 @@ export function Customers({ onNavigate: propOnNavigate }) {
     const p = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
     const l = parseInt(searchParams.get('limit') || '10', 10) || 10;
     const q = searchParams.get('q') || '';
+    const arc = searchParams.get('archived') === 'true';
     setPage((curr) => (curr !== p ? p : curr));
     setLimit((curr) => ([10, 25, 50].includes(l) && curr !== l ? l : curr));
     setSearch((curr) => (curr !== q ? q : curr));
+    setIsArchivedTab((curr) => (curr !== arc ? arc : curr));
   }, [searchParams]);
 
   // Update URL search parameters cleanly
-  const updateUrl = useCallback((newPage, newQuery, newLimit = limit) => {
-    const nextParams = new URLSearchParams();
-    if (newPage > 1) nextParams.set('page', String(newPage));
-    if (newLimit !== 10) nextParams.set('limit', String(newLimit));
-    if (newQuery && newQuery.trim()) nextParams.set('q', newQuery.trim());
-    setSearchParams(nextParams, { replace: true });
-  }, [limit, setSearchParams]);
+  const updateUrl = useCallback(
+    (newPage, newQuery, newLimit = limit, newArchived = isArchivedTab) => {
+      const nextParams = new URLSearchParams();
+      if (newPage > 1) nextParams.set('page', String(newPage));
+      if (newLimit !== 10) nextParams.set('limit', String(newLimit));
+      if (newQuery && newQuery.trim()) nextParams.set('q', newQuery.trim());
+      if (newArchived) nextParams.set('archived', 'true');
+      setSearchParams(nextParams, { replace: true });
+    },
+    [limit, isArchivedTab, setSearchParams]
+  );
 
-  // When debounced search query changes, reset to page 1
-  const prevDebouncedSearchRef = useRef(debouncedSearch);
+  // When debounced search query or archived tab changes, reset to page 1
+  const prevSearchRef = useRef(debouncedSearch);
+  const prevArchivedRef = useRef(isArchivedTab);
   useEffect(() => {
-    if (prevDebouncedSearchRef.current !== debouncedSearch) {
-      prevDebouncedSearchRef.current = debouncedSearch;
+    if (prevSearchRef.current !== debouncedSearch || prevArchivedRef.current !== isArchivedTab) {
+      prevSearchRef.current = debouncedSearch;
+      prevArchivedRef.current = isArchivedTab;
       setPage(1);
-      updateUrl(1, debouncedSearch, limit);
+      updateUrl(1, debouncedSearch, limit, isArchivedTab);
     }
-  }, [debouncedSearch, limit, updateUrl]);
+  }, [debouncedSearch, isArchivedTab, limit, updateUrl]);
 
-  // Prefetch next page in background when applicable
-  const prefetchNextPage = useCallback(async (nextPage, query, pageLimit) => {
-    try {
-      await customersApi.list({ page: nextPage, limit: pageLimit, search: query });
-    } catch {
-      // Ignore background prefetch errors
-    }
-  }, []);
+  // Query: Paginated customers list (with keepPreviousData)
+  const queryParams = useMemo(
+    () => ({
+      page,
+      limit,
+      q: (search === '' ? '' : debouncedSearch) || undefined,
+      archived: isArchivedTab ? 'true' : 'false'
+    }),
+    [page, limit, search, debouncedSearch, isArchivedTab]
+  );
 
-  // Fetch customers with keepPreviousData
-  const loadCustomersData = useCallback(async () => {
-    try {
-      setError(null);
-      setIsFetching(true);
+  const {
+    data: listResponse,
+    isLoading: loading,
+    isFetching,
+    error: queryError,
+    refetch: loadCustomersData
+  } = useQuery({
+    queryKey: customerQueryKeys.list(queryParams),
+    queryFn: () => customersApi.list(queryParams),
+    placeholderData: keepPreviousData,
+    enabled: isAuthReady
+  });
 
-      const [cRes, iRes] = await Promise.all([
-        customersApi.list({ page, limit, search: debouncedSearch }),
-        invoicesApi.list({ limit: 500, expand: true }),
-      ]);
+  const customers = useMemo(() => {
+    const raw = listResponse?.data;
+    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw?.customers)) return raw.customers;
+    return [];
+  }, [listResponse]);
 
-      const data = cRes?.data || {};
-      const custList = Array.isArray(data) ? data : (data.customers || []);
-      const totalCount = typeof data.total === 'number' ? data.total : custList.length;
-      const invList = Array.isArray(iRes?.data) ? iRes.data : (iRes?.data?.invoices || []);
-
-      setCustomers(custList);
-      setTotal(totalCount);
-      setInvoices(invList);
-
-      const totalPages = Math.ceil(totalCount / limit);
-      if (page < totalPages) {
-        prefetchNextPage(page + 1, debouncedSearch, limit);
-      }
-    } catch (err) {
-      console.error('Failed to load customers:', err);
-      setError(err.message || 'Failed to load customers. Please check your connection.');
-    } finally {
-      setLoading(false);
-      setIsFetching(false);
-    }
-  }, [page, limit, debouncedSearch, prefetchNextPage]);
-
-  useEffect(() => {
-    loadCustomersData();
-  }, [loadCustomersData, isAuthenticated]);
+  const total = useMemo(() => {
+    return listResponse?.meta?.total ?? listResponse?.data?.total ?? customers.length;
+  }, [listResponse, customers.length]);
 
   // Auto-fallback: if current page is empty after deletion and page > 1, go to page - 1
   useEffect(() => {
     if (!loading && !isFetching && customers.length === 0 && total > 0 && page > 1) {
       const prevPage = page - 1;
       setPage(prevPage);
-      updateUrl(prevPage, debouncedSearch, limit);
+      updateUrl(prevPage, debouncedSearch, limit, isArchivedTab);
     }
-  }, [customers.length, total, page, loading, isFetching, debouncedSearch, limit, updateUrl]);
+  }, [customers.length, total, page, loading, isFetching, debouncedSearch, limit, isArchivedTab, updateUrl]);
+
+  // Mutations
+  const archiveMutation = useMutation({
+    mutationFn: (id) => customersApi.archive(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: customerQueryKeys.all });
+    },
+    onError: (err) => {
+      alert(err.message || 'Failed to archive customer.');
+    }
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: (id) => customersApi.unarchive(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: customerQueryKeys.all });
+    },
+    onError: (err) => {
+      alert(err.message || 'Failed to unarchive customer.');
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => customersApi.delete(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: customerQueryKeys.all });
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+    },
+    onError: (err) => {
+      if (err.code === 'CUSTOMER_HAS_INVOICES') {
+        const count = err.details?.invoiceCount || 1;
+        setDeleteTarget((prev) => (prev ? { ...prev, invoiceCount: count } : null));
+      }
+      setDeleteError(err.message || 'Failed to delete customer.');
+    }
+  });
 
   const handlePageChange = (newPage) => {
     setPage(newPage);
-    updateUrl(newPage, debouncedSearch, limit);
+    updateUrl(newPage, debouncedSearch, limit, isArchivedTab);
     listTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const handleLimitChange = (newLimit) => {
     setLimit(newLimit);
     setPage(1);
-    updateUrl(1, debouncedSearch, newLimit);
+    updateUrl(1, debouncedSearch, newLimit, isArchivedTab);
   };
 
   const handleSearchChange = (e) => {
@@ -197,20 +233,14 @@ export function Customers({ onNavigate: propOnNavigate }) {
   const handleClearSearch = () => {
     setSearch('');
     setPage(1);
-    updateUrl(1, '', limit);
+    updateUrl(1, '', limit, isArchivedTab);
   };
 
-  const getCustomerInvoiceCount = useCallback((c) => {
-    if (!c) return 0;
-    const cId = String(c._id || c.id || '');
-    const cName = (c.name || '').trim().toLowerCase();
-    return invoices.filter((inv) => {
-      const invCustId = String(inv.customerId || inv.customer?.id || inv.customer?._id || '');
-      if (cId && invCustId === cId) return true;
-      if (cName && (inv.customer?.name || '').trim().toLowerCase() === cName) return true;
-      return false;
-    }).length;
-  }, [invoices]);
+  const handleArchivedChange = (newArchived) => {
+    setIsArchivedTab(newArchived);
+    setPage(1);
+    updateUrl(1, debouncedSearch, limit, newArchived);
+  };
 
   const handleOpenAdd = () => {
     setEditingCustomer(null);
@@ -224,17 +254,24 @@ export function Customers({ onNavigate: propOnNavigate }) {
 
   const handleSaveCustomer = async (formData) => {
     const targetId = editingCustomer?._id || editingCustomer?.id;
+    let res;
     if (editingCustomer) {
-      await customersApi.update(targetId, formData);
+      res = await customersApi.update(targetId, formData);
     } else {
-      await customersApi.create(formData);
+      res = await customersApi.create(formData);
+      // Reset to page 1, clear search, and show Active tab so newly created customer is visible
+      setPage(1);
+      setSearch('');
+      setIsArchivedTab(false);
+      updateUrl(1, '', limit, false);
     }
+    await queryClient.invalidateQueries({ queryKey: customerQueryKeys.all });
     setDrawerOpen(false);
-    loadCustomersData();
+    return res;
   };
 
   const handleInitiateDelete = (customer) => {
-    const count = getCustomerInvoiceCount(customer);
+    const count = customer.invoiceCount ?? 0;
     setDeleteTarget({ customer, invoiceCount: count });
     setDeleteError('');
     setDeleteDialogOpen(true);
@@ -243,22 +280,23 @@ export function Customers({ onNavigate: propOnNavigate }) {
   const handleConfirmDelete = async () => {
     if (!deleteTarget?.customer) return;
     const targetId = deleteTarget.customer._id || deleteTarget.customer.id;
-    try {
-      setDeleting(true);
-      setDeleteError('');
-      await customersApi.delete(targetId);
-      setDeleteDialogOpen(false);
-      setDeleteTarget(null);
-      loadCustomersData();
-    } catch (err) {
-      setDeleteError(err.message || 'Failed to delete customer.');
-    } finally {
-      setDeleting(false);
-    }
+    setDeleteError('');
+    deleteMutation.mutate(targetId);
   };
 
-  const isSearchEmpty = !loading && customers.length === 0 && Boolean(debouncedSearch);
-  const isEntirelyEmpty = !loading && total === 0 && !debouncedSearch;
+  const handleArchiveFromDialog = () => {
+    if (!deleteTarget?.customer) return;
+    const targetId = deleteTarget.customer._id || deleteTarget.customer.id;
+    archiveMutation.mutate(targetId, {
+      onSuccess: () => {
+        setDeleteDialogOpen(false);
+        setDeleteTarget(null);
+      }
+    });
+  };
+
+  const isSearchEmpty = !loading && !queryError && customers.length === 0 && Boolean(debouncedSearch);
+  const isEntirelyEmpty = !loading && !queryError && total === 0 && !debouncedSearch;
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   const getCustomerMenuItems = (c) => {
@@ -267,33 +305,47 @@ export function Customers({ onNavigate: propOnNavigate }) {
       {
         label: 'View details',
         icon: Eye,
-        onSelect: () => onNavigate('customer-details', targetId),
+        onSelect: () => onNavigate('customer-details', targetId)
       },
       {
         label: 'Edit',
         icon: Edit3,
-        onSelect: () => handleOpenEdit(c),
+        onSelect: () => handleOpenEdit(c)
       },
-      {
-        label: 'New invoice',
-        icon: Plus,
-        onSelect: () => onNavigate('create-invoice', null, { state: { customerId: targetId, customer: c } }),
-      },
-      // Archive is hidden because the backend lacks archive support
+      ...(!c.isArchived
+        ? [
+            {
+              label: 'New invoice',
+              icon: Plus,
+              onSelect: () =>
+                onNavigate('create-invoice', null, { state: { customerId: targetId, customer: c } })
+            },
+            {
+              label: 'Archive',
+              icon: Archive,
+              onSelect: () => archiveMutation.mutate(targetId)
+            }
+          ]
+        : [
+            {
+              label: 'Unarchive',
+              icon: ArchiveRestore,
+              onSelect: () => unarchiveMutation.mutate(targetId)
+            }
+          ]),
       {
         label: 'Delete',
         icon: Trash2,
         danger: true,
         dividerBefore: true,
-        onSelect: () => handleInitiateDelete(c),
-      },
+        onSelect: () => handleInitiateDelete(c)
+      }
     ];
   };
 
   return (
     <div className="flex flex-col min-h-full w-full bg-bg text-text font-sans">
       <div className="mx-auto w-full max-w-screen-xl px-4 sm:px-6 py-6 flex-1 flex flex-col space-y-6">
-
         {/* ── Page Header ────────────────────────────────────────────────── */}
         <PageHeader
           title="Customers"
@@ -317,38 +369,62 @@ export function Customers({ onNavigate: propOnNavigate }) {
         />
 
         {/* ── Error Banner ────────────────────────────────────────────────── */}
-        {error && (
+        {queryError && (
           <div className="flex items-center justify-between rounded-lg border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm gap-3">
             <div className="flex items-center gap-2 text-danger min-w-0">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              <span className="truncate">{error}</span>
+              <span className="truncate">{queryError.message || 'Failed to load customers.'}</span>
             </div>
-            <Button variant="secondary" size="sm" onClick={loadCustomersData} className="shrink-0">
+            <Button variant="secondary" size="sm" onClick={() => loadCustomersData()} className="shrink-0">
               Retry
             </Button>
           </div>
         )}
 
-        {/* ── Search Bar ──────────────────────────────────────────────────── */}
-        <div className="relative w-full max-w-sm">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search by name or GSTIN…"
-            value={search}
-            onChange={handleSearchChange}
-            className="h-10 w-full rounded-lg border border-border bg-surface pl-9 pr-8 text-sm font-normal text-text placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent"
-          />
-          {search && (
+        {/* ── Search Bar & Active/Archived Filter ─────────────────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="relative w-full max-w-sm">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search by name, GSTIN or state…"
+              value={search}
+              onChange={handleSearchChange}
+              className="h-10 w-full rounded-lg border border-border bg-surface pl-9 pr-8 text-sm font-normal text-text placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                aria-label="Clear search"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-text cursor-pointer p-0.5"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Active / Archived Segmented Control */}
+          <div className="flex items-center h-10 rounded-lg border border-border bg-surface p-1 text-xs shrink-0 self-start sm:self-auto">
             <button
               type="button"
-              onClick={handleClearSearch}
-              aria-label="Clear search"
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-text cursor-pointer p-0.5"
+              onClick={() => handleArchivedChange(false)}
+              className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer ${
+                !isArchivedTab ? 'bg-accent text-text shadow-sm' : 'text-muted hover:text-text'
+              }`}
             >
-              <X className="w-3.5 h-3.5" />
+              Active
             </button>
-          )}
+            <button
+              type="button"
+              onClick={() => handleArchivedChange(true)}
+              className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer ${
+                isArchivedTab ? 'bg-accent text-text shadow-sm' : 'text-muted hover:text-text'
+              }`}
+            >
+              Archived
+            </button>
+          </div>
         </div>
 
         {/* ── Direct-on-Page List Area (grows via flex-1) ─────────────────── */}
@@ -370,6 +446,20 @@ export function Customers({ onNavigate: propOnNavigate }) {
                 </div>
               ))}
             </div>
+          ) : queryError ? (
+            /* Error state with retry */
+            <div className="min-h-[240px] flex flex-col items-center justify-center p-6 text-center">
+              <div className="w-10 h-10 rounded-lg bg-surface border border-danger/30 flex items-center justify-center text-danger mb-3">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-semibold text-text">Failed to load customers</h3>
+              <p className="text-xs text-muted mt-1 max-w-sm">
+                {queryError.message || 'Unable to load customers. Please check your connection.'}
+              </p>
+              <Button variant="secondary" size="sm" onClick={loadCustomersData} className="mt-4">
+                Retry
+              </Button>
+            </div>
           ) : isSearchEmpty ? (
             /* Search with No Results */
             <div className="min-h-[240px] flex flex-col items-center justify-center p-6 text-center">
@@ -378,14 +468,9 @@ export function Customers({ onNavigate: propOnNavigate }) {
               </div>
               <h3 className="text-base font-semibold text-text">No matching customers</h3>
               <p className="text-xs text-muted mt-1 max-w-sm">
-                No customer records matched &ldquo;{debouncedSearch}&rdquo;. Try another name or GSTIN.
+                No customer records matched &ldquo;{debouncedSearch}&rdquo;. Try another name, GSTIN, or state.
               </p>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleClearSearch}
-                className="mt-4"
-              >
+              <Button variant="secondary" size="sm" onClick={handleClearSearch} className="mt-4">
                 Clear search
               </Button>
             </div>
@@ -395,22 +480,27 @@ export function Customers({ onNavigate: propOnNavigate }) {
               <div className="w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center text-muted mb-3">
                 <Users className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-semibold text-text">Your customer directory is empty</h3>
+              <h3 className="text-base font-semibold text-text">
+                {isArchivedTab ? 'No archived customers' : 'Your customer directory is empty'}
+              </h3>
               <p className="text-xs text-muted mt-1 max-w-sm">
-                Add customers with their GSTIN and billing details to generate invoices faster.
+                {isArchivedTab
+                  ? 'Customers you archive will appear here so you can review or unarchive them.'
+                  : 'Add customers with their GSTIN and billing details to generate invoices faster.'}
               </p>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleOpenAdd}
-                className="mt-4"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add Customer
-              </Button>
+              {!isArchivedTab && (
+                <Button variant="primary" size="sm" onClick={handleOpenAdd} className="mt-4">
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Customer
+                </Button>
+              )}
             </div>
           ) : (
-            <div className={isFetching ? 'opacity-60 pointer-events-none transition-opacity duration-150' : 'transition-opacity duration-150'}>
+            <div
+              className={
+                isFetching ? 'opacity-60 pointer-events-none transition-opacity duration-150' : 'transition-opacity duration-150'
+              }
+            >
               {/* Desktop Table View (≥ md) — Unified Grid Template */}
               <div className="hidden md:block w-full">
                 {/* Header Row */}
@@ -444,19 +534,22 @@ export function Customers({ onNavigate: propOnNavigate }) {
                       >
                         {/* 1. Customer: Name + Address + Phone/Email second line */}
                         <div className="min-w-0 pr-2">
-                          <div className="text-sm font-medium text-text truncate">
-                            {c.name}
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-text truncate">{c.name}</span>
+                            {c.isArchived && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-500 border border-amber-500/20 shrink-0">
+                                Archived
+                              </span>
+                            )}
                           </div>
-                          <div
-                            className="text-xs text-muted truncate mt-0.5"
-                            title={c.address || undefined}
-                          >
+                          <div className="text-xs text-muted truncate mt-0.5" title={c.address || undefined}>
                             {c.address ? (
                               <span>
                                 {c.address}
                                 {(c.email || c.phone) && (
                                   <span className="text-faint">
-                                    {' '}· {c.email || `+91 ${c.phone}`}
+                                    {' '}
+                                    · {c.email || `+91 ${c.phone}`}
                                   </span>
                                 )}
                               </span>
@@ -473,9 +566,7 @@ export function Customers({ onNavigate: propOnNavigate }) {
                           {c.gstin ? (
                             <span>{c.gstin}</span>
                           ) : (
-                            <span className="text-faint">
-                              {getCustomerTypeLabel(c.customerType)}
-                            </span>
+                            <span className="text-faint">{getCustomerTypeLabel(c.customerType)}</span>
                           )}
                         </div>
 
@@ -530,13 +621,15 @@ export function Customers({ onNavigate: propOnNavigate }) {
                       {/* Stack Item 1: Name, Address & Contact, Kebab Menu */}
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium text-text truncate">
-                            {c.name}
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-text truncate">{c.name}</span>
+                            {c.isArchived && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-500 border border-amber-500/20 shrink-0">
+                                Archived
+                              </span>
+                            )}
                           </div>
-                          <div
-                            className="text-xs text-muted truncate mt-0.5"
-                            title={c.address}
-                          >
+                          <div className="text-xs text-muted truncate mt-0.5" title={c.address}>
                             {c.address || (c.email ? `${c.email}${c.phone ? ` · +91 ${c.phone}` : ''}` : '—')}
                           </div>
                         </div>
@@ -575,7 +668,7 @@ export function Customers({ onNavigate: propOnNavigate }) {
           )}
         </div>
 
-        {/* ── Sticky Pagination Footer (stays visible on scroll, naturally follows shorter lists) ── */}
+        {/* ── Sticky Pagination Footer ────────────────────────────────────── */}
         <div className="sticky bottom-0 bg-bg z-10">
           <Pagination
             page={page}
@@ -588,7 +681,6 @@ export function Customers({ onNavigate: propOnNavigate }) {
             loading={isFetching}
           />
         </div>
-
       </div>
 
       {/* ── Customer Drawer ────────────────────────────────────────────────── */}
@@ -615,14 +707,26 @@ export function Customers({ onNavigate: propOnNavigate }) {
                 }. Invoices are tax records and must be kept. You can archive the customer instead.`
               : "This customer will be permanently removed. This can't be undone."
           }
-          confirmLabel={deleteTarget.invoiceCount > 0 ? null : 'Delete customer'}
+          confirmLabel={
+            deleteTarget.invoiceCount > 0
+              ? deleteTarget.customer.isArchived
+                ? null
+                : 'Archive customer'
+              : 'Delete customer'
+          }
           cancelLabel={deleteTarget.invoiceCount > 0 ? 'Close' : 'Cancel'}
           destructive={deleteTarget.invoiceCount === 0}
-          loading={deleting}
+          loading={deleteMutation.isPending || archiveMutation.isPending}
           error={deleteError}
-          onConfirm={handleConfirmDelete}
+          onConfirm={() => {
+            if (deleteTarget.invoiceCount > 0) {
+              handleArchiveFromDialog();
+            } else {
+              handleConfirmDelete();
+            }
+          }}
           onCancel={() => {
-            if (!deleting) {
+            if (!deleteMutation.isPending && !archiveMutation.isPending) {
               setDeleteDialogOpen(false);
               setDeleteTarget(null);
             }

@@ -186,14 +186,33 @@ export function generateInvoicePDF(invoice, options = { action: 'download' }) {
   let tableHeaders;
   let tableData;
 
+  const allSameCgst = items.length > 0 && items.every((it) => Number(it.cgstRate) === Number(items[0].cgstRate));
+  const uniformCgst = allSameCgst ? items[0].cgstRate : null;
+  const allSameIgst = items.length > 0 && items.every((it) => Number(it.igstRate) === Number(items[0].igstRate));
+  const uniformIgst = allSameIgst ? items[0].igstRate : null;
+
   if (taxType === 'INTRA') {
     tableHeaders = [
-      ['#', 'Item / Description', 'HSN/SAC', 'Qty', 'Rate', 'Taxable', 'CGST', 'SGST', 'Amount']
+      [
+        '#',
+        'Item / Description',
+        'HSN/SAC',
+        'Qty',
+        'Rate',
+        'Taxable',
+        uniformCgst !== null ? `CGST ${uniformCgst}%` : 'CGST',
+        uniformCgst !== null ? `SGST ${uniformCgst}%` : 'SGST',
+        'Amount'
+      ]
     ];
     tableData = items.map((item, index) => {
       const taxable = Number(item.taxableAmount || 0).toFixed(2);
-      const cgstStr = `${item.cgstRate || 0}%\nRs. ${Number(item.cgstAmount || 0).toFixed(2)}`;
-      const sgstStr = `${item.sgstRate || 0}%\nRs. ${Number(item.sgstAmount || 0).toFixed(2)}`;
+      const cgstStr = uniformCgst !== null
+        ? Number(item.cgstAmount || 0).toFixed(2)
+        : `${item.cgstRate || 0}%\nRs. ${Number(item.cgstAmount || 0).toFixed(2)}`;
+      const sgstStr = uniformCgst !== null
+        ? Number(item.sgstAmount || 0).toFixed(2)
+        : `${item.sgstRate || 0}%\nRs. ${Number(item.sgstAmount || 0).toFixed(2)}`;
       const totalStr = Number(item.totalAmount || 0).toFixed(2);
 
       return [
@@ -210,11 +229,22 @@ export function generateInvoicePDF(invoice, options = { action: 'download' }) {
     });
   } else {
     tableHeaders = [
-      ['#', 'Item / Description', 'HSN/SAC', 'Qty', 'Rate', 'Taxable', 'IGST', 'Amount']
+      [
+        '#',
+        'Item / Description',
+        'HSN/SAC',
+        'Qty',
+        'Rate',
+        'Taxable',
+        uniformIgst !== null ? `IGST ${uniformIgst}%` : 'IGST',
+        'Amount'
+      ]
     ];
     tableData = items.map((item, index) => {
       const taxable = Number(item.taxableAmount || 0).toFixed(2);
-      const igstStr = `${item.igstRate || 0}%\nRs. ${Number(item.igstAmount || 0).toFixed(2)}`;
+      const igstStr = uniformIgst !== null
+        ? Number(item.igstAmount || 0).toFixed(2)
+        : `${item.igstRate || 0}%\nRs. ${Number(item.igstAmount || 0).toFixed(2)}`;
       const totalStr = Number(item.totalAmount || 0).toFixed(2);
 
       return [
@@ -255,7 +285,7 @@ export function generateInvoicePDF(invoice, options = { action: 'download' }) {
           0: { halign: 'center', cellWidth: 8 },
           1: { cellWidth: 'auto' },
           2: { halign: 'center', cellWidth: 18 },
-          3: { halign: 'center', cellWidth: 15 },
+          3: { halign: 'right', cellWidth: 15 },
           4: { halign: 'right', cellWidth: 18 },
           5: { halign: 'right', cellWidth: 20 },
           6: { halign: 'right', cellWidth: 18 },
@@ -266,7 +296,7 @@ export function generateInvoicePDF(invoice, options = { action: 'download' }) {
           0: { halign: 'center', cellWidth: 8 },
           1: { cellWidth: 'auto' },
           2: { halign: 'center', cellWidth: 20 },
-          3: { halign: 'center', cellWidth: 18 },
+          3: { halign: 'right', cellWidth: 18 },
           4: { halign: 'right', cellWidth: 22 },
           5: { halign: 'right', cellWidth: 24 },
           6: { halign: 'right', cellWidth: 24 },
@@ -423,6 +453,25 @@ export function generateInvoicePDF(invoice, options = { action: 'download' }) {
   doc.setFontSize(7);
   doc.setTextColor(148, 163, 184);
   doc.text('Generated via BillGST — Free GST Invoicing for India', margin, pageHeight - 8);
+
+  // Watermark on all pages for Draft or Cancelled status
+  if (invoice.status === 'Draft' || invoice.status === 'Cancelled') {
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.saveGraphicsState?.();
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(64);
+      doc.setTextColor(230, 230, 235);
+      doc.text(
+        invoice.status === 'Cancelled' ? 'CANCELLED' : 'DRAFT',
+        pageWidth / 2,
+        pageHeight / 2,
+        { align: 'center', angle: 45 }
+      );
+      doc.restoreGraphicsState?.();
+    }
+  }
 
   const safeFileName = `${(invoice.invoiceNumber || 'invoice').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
 

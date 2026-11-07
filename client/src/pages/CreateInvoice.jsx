@@ -21,6 +21,7 @@ import React, {
   useState, useEffect, useRef, useMemo, useCallback, useId
 } from 'react';
 import { useParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Trash2, Plus, Printer, Download, Save,
   ChevronDown, Sparkles, AlertCircle, Eye, X
@@ -42,6 +43,7 @@ import { INDIAN_STATES }                            from '../gst/taxRules';
 import { useAppNavigate }                           from '../utils/navigation';
 import { ProductPickerModal }                       from '../components/invoice/ProductPickerModal';
 import { normalizeCustomerType, getCustomerTypeLabel } from '../utils/customer';
+import { useDebounce }                               from '../utils/useDebounce';
 import { useUnsavedChanges, useNavigationBlocker }  from '../utils/useUnsavedChanges';
 import { ConfirmDialog }                            from '../components/ui/ConfirmDialog';
 import {
@@ -124,27 +126,39 @@ const EMPTY_ITEM = () => ({
 const ITEMS_GRID_CLASS = 'grid-cols-[minmax(0,1fr)_110px_80px_110px_90px_110px_40px] gap-3';
 
 // ── CustomerCombobox ──────────────────────────────────────────────────────────
-// Accepts onQuickAdd(name) to open the CustomerDrawer pre-filled with the typed name.
-function CustomerCombobox({ value, onChange, onSelectCustomer, customers = [], error, id = 'customer-name', onQuickAdd }) {
+// Calls customersApi.search with a 300ms debounce. An empty query shows recent customers.
+function CustomerCombobox({ value, onChange, onSelectCustomer, error, id = 'customer-name', onQuickAdd }) {
   const [open, setOpen] = useState(false);
+  const [results, setResults] = useState([]);
   const containerRef    = useRef(null);
 
-  const filtered = useMemo(() => {
-    if (!value.trim()) return customers.slice(0, 8);
-    const q = value.toLowerCase();
-    return customers
-      .filter(c =>
-        (c.name  && c.name.toLowerCase().includes(q)) ||
-        (c.gstin && c.gstin.toLowerCase().includes(q))
-      )
-      .slice(0, 8);
-  }, [customers, value]);
+  const debouncedQuery = useDebounce(value, 300);
+
+  useEffect(() => {
+    let active = true;
+    if (open) {
+      customersApi
+        .search({ q: (debouncedQuery || '').trim(), limit: 10 })
+        .then((res) => {
+          if (active) {
+            const list = Array.isArray(res?.data) ? res.data : [];
+            setResults(list);
+          }
+        })
+        .catch(() => {
+          if (active) setResults([]);
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [open, debouncedQuery]);
 
   // Show quick-add option when typed text doesn't match any customer exactly
   const showQuickAdd = Boolean(
     onQuickAdd &&
     value.trim() &&
-    !customers.some(c => c.name?.toLowerCase() === value.trim().toLowerCase())
+    !results.some(c => c.name?.toLowerCase() === value.trim().toLowerCase())
   );
 
   useEffect(() => {
@@ -168,25 +182,23 @@ function CustomerCombobox({ value, onChange, onSelectCustomer, customers = [], e
           onChange={e => { onChange(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
         />
-        {customers.length > 0 && (
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={() => setOpen(o => !o)}
-            aria-label="Toggle saved customers"
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-text p-1 cursor-pointer"
-          >
-            <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
-          </button>
-        )}
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => setOpen(o => !o)}
+          aria-label="Toggle saved customers"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-text p-1 cursor-pointer"
+        >
+          <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+        </button>
       </div>
 
-      {open && (filtered.length > 0 || showQuickAdd) && (
+      {open && (results.length > 0 || showQuickAdd) && (
         <ul
           role="listbox"
           className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-lg bg-surface border border-border shadow-xl py-1 text-sm"
         >
-          {filtered.map(c => (
+          {results.map(c => (
             <li
               key={c._id || c.id}
               role="option"
@@ -646,14 +658,17 @@ function PreviewSheet({ payload, calc, onClose }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavigate }) {
+  const queryClient = useQueryClient();
   const params      = useParams();
   const appNavigate = useAppNavigate();
   const onNavigate  = propOnNavigate || appNavigate;
   const invoiceId   = propInvoiceId  || params.id;
   const isEditing   = Boolean(invoiceId);
-  const { isAuthenticated } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
 
   // State
+  // Start as loading only while auth is still resolving; once auth is ready,
+  // loadSetupData sets it back to true then false when done.
   const [loading,            setLoading]           = useState(true);
   const [saving,             setSaving]            = useState(false);
   const [showPreviewModal,   setShowPreviewModal]  = useState(false);
@@ -733,18 +748,22 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
   }, []);
 
   // Load initial data
-  useEffect(() => { loadSetupData(); }, [invoiceId, isAuthenticated]);
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      loadSetupData();
+    } else if (isLoaded && !isSignedIn) {
+      setLoading(false);
+    }
+  }, [invoiceId, isLoaded, isSignedIn]);
 
   const loadSetupData = async () => {
     try {
       setLoading(true);
-      const [bRes, cRes, numRes] = await Promise.all([
+      const [bRes, numRes] = await Promise.all([
         businessApi.get(),
-        customersApi.list({ limit: 100 }),
         invoicesApi.getNextNumber(),
       ]);
       const biz      = bRes?.data || null;
-      const custList = Array.isArray(cRes?.data) ? cRes.data : (cRes?.data?.customers || []);
       const nextNum  = numRes?.data?.nextInvoiceNumber || 'INV/26-27/001';
       const sets = {
         invoicePrefix:  biz?.invoiceSettings?.invoicePrefix  || 'INV/',
@@ -753,7 +772,7 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
         defaultTerms:   biz?.invoiceSettings?.defaultTerms   || 'Payment due within 15 days.',
         bankDetails:    biz?.bankDetails || {},
       };
-      setBusiness(biz); setCustomers(custList); setExistingInvoices([]); setSettings(sets);
+      setBusiness(biz); setCustomers([]); setExistingInvoices([]); setSettings(sets);
 
       let loadedValues;
       if (isEditing) {
@@ -865,14 +884,34 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
   }, []);
 
   const handleSavedQuickCustomer = useCallback(async (formData) => {
-    const res = await customersApi.create(formData);
-    const saved = res?.data || formData;
-    // Add to local list
-    setCustomers(prev => [...prev, saved]);
-    // Auto-select the new customer
-    handleSelectCustomer(saved);
-    setCustomerDrawerOpen(false);
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+    try {
+      const res = await customersApi.create(formData);
+      const saved = res?.data || formData;
+      await queryClient.invalidateQueries({ queryKey: ['customers'] });
+      handleSelectCustomer(saved);
+      setCustomerDrawerOpen(false);
+      return res;
+    } catch (err) {
+      if (err.code === 'DUPLICATE_GSTIN') {
+        const details = err.details || err.fields || {};
+        if (details.existingId) {
+          try {
+            const existingRes = await customersApi.get(details.existingId);
+            const existingCust = existingRes?.data;
+            if (existingCust) {
+              await queryClient.invalidateQueries({ queryKey: ['customers'] });
+              handleSelectCustomer(existingCust);
+              setCustomerDrawerOpen(false);
+              return existingRes;
+            }
+          } catch (getErr) {
+            console.error('Failed to get existing customer on DUPLICATE_GSTIN:', getErr);
+          }
+        }
+      }
+      throw err;
+    }
+  }, [handleSelectCustomer, queryClient]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Items
   const handleItemChange = useCallback((idx, field, value) => {
@@ -1014,6 +1053,24 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 bg-bg text-text">
         <div className="w-7 h-7 rounded-full border-2 border-border border-t-accent animate-spin" />
         <p className="text-sm text-muted">Preparing invoice editor…</p>
+      </div>
+    );
+  }
+
+  if (errors.global) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 bg-bg text-text px-4">
+        <div className="flex items-center gap-2 text-danger">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <p className="text-sm font-medium">{errors.global}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setErrors({}); setLoading(true); loadSetupData(); }}
+          className="text-sm px-4 py-2 rounded-lg border border-border bg-surface hover:bg-border transition-colors cursor-pointer"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -1198,7 +1255,6 @@ export function CreateInvoice({ invoiceId: propInvoiceId, onNavigate: propOnNavi
                       value={customerData.name}
                       onChange={handleCustomerNameChange}
                       onSelectCustomer={handleSelectCustomer}
-                      customers={customers}
                       error={Boolean(errors.customerName)}
                       onQuickAdd={handleQuickAddCustomer}
                     />

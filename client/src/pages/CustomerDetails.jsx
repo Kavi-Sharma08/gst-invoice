@@ -8,10 +8,12 @@
  *  - Stats Strip: Single 3-column bordered strip (Total billed, Paid, Outstanding) with colored indicator dots and normal text color tabular-nums values.
  *  - Invoices: Unified grid rows directly on page, status filter (All, Paid, Issued, Draft, Cancelled) on right of Invoices heading.
  *  - Details Drawer: Accessible read-only slide-in drawer showing all customer details, quick-add links for missing fields, and Edit customer button.
+ *  - TanStack Query: Separate parallel queries for customer detail, invoices list, and summary.
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Plus,
@@ -21,11 +23,13 @@ import {
   User,
   Info,
   AlertTriangle,
+  Archive,
+  ArchiveRestore
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
-import { customersApi } from '../api/customers.api';
-import { invoicesApi } from '../api/invoices.api';
+import { customersApi, customerQueryKeys } from '../api/customers.api';
+import { invoicesApi, invoiceQueryKeys } from '../api/invoices.api';
 import { useAppNavigate } from '../utils/navigation';
 import { formatCurrency } from '../utils/currency';
 import { normalizeCustomerType, getCustomerTypeLabel, CUSTOMER_TYPES } from '../utils/customer';
@@ -50,14 +54,11 @@ function checkStateMismatch(gstin, state) {
 
 export function CustomerDetails({ onNavigate: propOnNavigate }) {
   const { id } = useParams();
-  const { isAuthenticated } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
+  const isAuthReady = Boolean(isLoaded && isSignedIn);
+  const queryClient = useQueryClient();
   const appNavigate = useAppNavigate();
   const onNavigate = propOnNavigate || appNavigate;
-
-  const [customer, setCustomer] = useState(null);
-  const [invoices, setInvoices] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   // Status filter: 'All' | 'Paid' | 'Issued' | 'Draft' | 'Cancelled'
   const [statusFilter, setStatusFilter] = useState('All');
@@ -70,43 +71,52 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
 
   // In-app Delete Dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
-  const [serverStats, setServerStats] = useState(null);
+  // 1. Customer detail query
+  const {
+    data: customerRes,
+    isLoading: customerLoading,
+    error: customerError,
+    refetch: refetchCustomer
+  } = useQuery({
+    queryKey: customerQueryKeys.detail(id),
+    queryFn: () => customersApi.get(id),
+    enabled: isAuthReady && Boolean(id)
+  });
 
-  const loadData = useCallback(async () => {
-    if (!id) return;
-    try {
-      setLoading(true);
-      setError(null);
+  // 2. Invoices for customer query
+  const {
+    data: invoicesRes,
+    isLoading: invoicesLoading
+  } = useQuery({
+    queryKey: invoiceQueryKeys.list({ customerId: id, limit: 100 }),
+    queryFn: () => invoicesApi.list({ customerId: id, limit: 100 }),
+    enabled: isAuthReady && Boolean(id)
+  });
 
-      const [cRes, iRes, sRes] = await Promise.all([
-        customersApi.get(id),
-        invoicesApi.list({ customerId: id, limit: 100 }),
-        invoicesApi.getSummary(id),
-      ]);
+  // 3. Invoice summary for customer query
+  const {
+    data: summaryRes,
+    isLoading: summaryLoading
+  } = useQuery({
+    queryKey: invoiceQueryKeys.summary(id),
+    queryFn: () => invoicesApi.getSummary(id),
+    enabled: isAuthReady && Boolean(id)
+  });
 
-      const cust = cRes?.data || null;
-      const allInvoices = Array.isArray(iRes?.data) ? iRes.data : (iRes?.data?.invoices || []);
-      const summaryData = sRes?.data || null;
+  const customer = customerRes?.data || null;
 
-      setCustomer(cust);
-      setInvoices(allInvoices);
-      if (summaryData) {
-        setServerStats(summaryData);
-      }
-    } catch (err) {
-      console.error('Failed to load customer details:', err);
-      setError(err.message || 'Failed to load customer details.');
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  const invoices = useMemo(() => {
+    const raw = invoicesRes?.data;
+    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw?.invoices)) return raw.invoices;
+    return [];
+  }, [invoicesRes]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData, isAuthenticated]);
+  const serverStats = summaryRes?.data || null;
+  const loading = customerLoading || (invoicesLoading && !invoices.length);
+  const error = customerError?.message || null;
 
   // Filter invoices for this customer
   const customerInvoices = useMemo(() => {
@@ -163,12 +173,42 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
     };
   }, [serverStats, customerInvoices]);
 
+  // Mutations
+  const archiveMutation = useMutation({
+    mutationFn: () => customersApi.archive(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: customerQueryKeys.all });
+    },
+    onError: (err) => alert(err.message || 'Failed to archive customer.')
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: () => customersApi.unarchive(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: customerQueryKeys.all });
+    },
+    onError: (err) => alert(err.message || 'Failed to unarchive customer.')
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => customersApi.delete(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: customerQueryKeys.all });
+      setDeleteDialogOpen(false);
+      onNavigate('customers');
+    },
+    onError: (err) => {
+      setDeleteError(err.message || 'Failed to delete customer.');
+    }
+  });
+
   // Drawer save handler
   const handleSaveCustomer = async (formData) => {
     const targetId = customer?._id || customer?.id || id;
-    await customersApi.update(targetId, formData);
+    const res = await customersApi.update(targetId, formData);
+    await queryClient.invalidateQueries({ queryKey: customerQueryKeys.all });
     setDrawerOpen(false);
-    loadData();
+    return res;
   };
 
   // Switch from view drawer to edit drawer
@@ -179,18 +219,8 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
 
   // Delete handler
   const handleConfirmDelete = async () => {
-    const targetId = customer?._id || customer?.id || id;
-    try {
-      setDeleting(true);
-      setDeleteError('');
-      await customersApi.delete(targetId);
-      setDeleteDialogOpen(false);
-      onNavigate('customers');
-    } catch (err) {
-      setDeleteError(err.message || 'Failed to delete customer.');
-    } finally {
-      setDeleting(false);
-    }
+    setDeleteError('');
+    deleteMutation.mutate();
   };
 
   // PDF download handler
@@ -208,6 +238,8 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
     try {
       const targetId = invoice._id || invoice.id;
       const res = await invoicesApi.duplicate(targetId);
+      queryClient.invalidateQueries({ queryKey: invoiceQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: customerQueryKeys.lists() });
       const newId = res?.data?._id || res?.data?.id;
       if (newId) {
         onNavigate('edit-invoice', newId);
@@ -222,7 +254,8 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
     const targetId = invoice._id || invoice.id;
     try {
       await invoicesApi.cancel(targetId);
-      loadData();
+      queryClient.invalidateQueries({ queryKey: invoiceQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: customerQueryKeys.lists() });
     } catch (err) {
       console.error('Failed to cancel invoice:', err);
     }
@@ -240,7 +273,21 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
         icon: Edit3,
         onSelect: () => setDrawerOpen(true),
       },
-      // Archive is omitted until server supports it (never show dead items)
+      ...(customer?.isArchived
+        ? [
+            {
+              label: 'Unarchive',
+              icon: ArchiveRestore,
+              onSelect: () => unarchiveMutation.mutate(),
+            },
+          ]
+        : [
+            {
+              label: 'Archive',
+              icon: Archive,
+              onSelect: () => archiveMutation.mutate(),
+            },
+          ]),
       {
         label: 'Delete',
         icon: Trash2,
@@ -252,7 +299,7 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
         },
       },
     ];
-  }, []);
+  }, [customer?.isArchived, archiveMutation, unarchiveMutation]);
 
   const normalizedType = normalizeCustomerType(
     customer?.customerType || (customer?.gstin ? 'registered' : 'unregistered')
@@ -374,32 +421,56 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
           title={customer.name}
           backLink={{ label: 'Customers', onClick: () => onNavigate('customers') }}
           badge={
-            <span
-              title={
-                isRegistered
-                  ? 'Registered business with a valid GSTIN'
-                  : 'Unregistered business or consumer without GSTIN'
-              }
-              className="inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-md border border-border bg-surface text-muted cursor-help"
-            >
-              {getCustomerTypeLabel(normalizedType)}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span
+                title={
+                  isRegistered
+                    ? 'Registered business with a valid GSTIN'
+                    : 'Unregistered business or consumer without GSTIN'
+                }
+                className="inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-md border border-border bg-surface text-muted cursor-help"
+              >
+                {getCustomerTypeLabel(normalizedType)}
+              </span>
+              {customer.isArchived && (
+                <span
+                  title="This customer is archived"
+                  className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border border-amber-500/20 bg-amber-500/10 text-amber-500"
+                >
+                  Archived
+                </span>
+              )}
+            </div>
           }
           actions={
             <>
-              <Button
-                variant="primary"
-                size="md"
-                onClick={() =>
-                  onNavigate('create-invoice', null, {
-                    state: { customerId: customer._id || customer.id || id, customer },
-                  })
-                }
-                className="h-9 px-3.5 text-xs font-medium"
-              >
-                <Plus className="w-4 h-4" />
-                <span>New invoice</span>
-              </Button>
+              {customer.isArchived ? (
+                <span title="Archived customers cannot be billed on new invoices. Unarchive first.">
+                  <Button
+                    variant="primary"
+                    size="md"
+                    disabled
+                    className="h-9 px-3.5 text-xs font-medium opacity-50 cursor-not-allowed"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>New invoice</span>
+                  </Button>
+                </span>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() =>
+                    onNavigate('create-invoice', null, {
+                      state: { customerId: customer._id || customer.id || id, customer },
+                    })
+                  }
+                  className="h-9 px-3.5 text-xs font-medium"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>New invoice</span>
+                </Button>
+              )}
 
               <button
                 type="button"
@@ -529,19 +600,21 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
                     ? 'Try selecting a different status filter.'
                     : 'Create a new GST invoice for this customer to begin billing.'}
                 </p>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() =>
-                    onNavigate('create-invoice', null, {
-                      state: { customerId: customer._id || customer.id || id, customer },
-                    })
-                  }
-                  className="mt-4"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Create invoice</span>
-                </Button>
+                {!customer.isArchived && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() =>
+                      onNavigate('create-invoice', null, {
+                        state: { customerId: customer._id || customer.id || id, customer },
+                      })
+                    }
+                    className="mt-4"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Create invoice</span>
+                  </Button>
+                )}
               </div>
             }
           />
@@ -580,14 +653,22 @@ export function CustomerDetails({ onNavigate: propOnNavigate }) {
               }. Invoices are tax records and must be kept. You can archive the customer instead.`
             : "This customer will be permanently removed. This can't be undone."
         }
-        confirmLabel={customerInvoices.length > 0 ? null : 'Delete customer'}
+        confirmLabel={customerInvoices.length > 0 ? (customer.isArchived ? null : 'Archive customer') : 'Delete customer'}
         cancelLabel={customerInvoices.length > 0 ? 'Close' : 'Cancel'}
         destructive={customerInvoices.length === 0}
-        loading={deleting}
+        loading={deleteMutation.isPending || archiveMutation.isPending}
         error={deleteError}
-        onConfirm={handleConfirmDelete}
+        onConfirm={() => {
+          if (customerInvoices.length > 0) {
+            archiveMutation.mutate(undefined, {
+              onSuccess: () => setDeleteDialogOpen(false)
+            });
+          } else {
+            handleConfirmDelete();
+          }
+        }}
         onCancel={() => {
-          if (!deleting) setDeleteDialogOpen(false);
+          if (!deleteMutation.isPending && !archiveMutation.isPending) setDeleteDialogOpen(false);
         }}
       />
     </div>

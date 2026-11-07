@@ -13,7 +13,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Plus,
@@ -109,6 +109,7 @@ const STATUS_TABS = [
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function Invoices({ onNavigate: propOnNavigate }) {
+  const location = useLocation();
   const appNavigate = useAppNavigate();
   const onNavigate = propOnNavigate || appNavigate;
   const { isAuthenticated, isLoaded, isSignedIn } = useAuth();
@@ -270,6 +271,7 @@ export function Invoices({ onNavigate: propOnNavigate }) {
       queryClient.invalidateQueries({ queryKey: ['invoices', 'counts'] });
       queryClient.invalidateQueries({ queryKey: ['invoices', 'summary'] });
       queryClient.invalidateQueries({ queryKey: invoiceQueryKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: ['customers', 'list'] });
       setCancelTarget(null);
     },
     onError: (err) => {
@@ -338,8 +340,8 @@ export function Invoices({ onNavigate: propOnNavigate }) {
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const hasFilters = !!debouncedSearch || statusFilter !== 'ALL';
-  const isEntirelyEmpty = !loading && total === 0 && !hasFilters;
-  const isNoMatch = !loading && total === 0 && hasFilters;
+  const isEntirelyEmpty = !loading && !error && total === 0 && !hasFilters;
+  const isNoMatch = !loading && !error && total === 0 && hasFilters;
 
   return (
     <div className="w-full bg-bg text-text font-sans flex flex-col min-h-full">
@@ -496,8 +498,27 @@ export function Invoices({ onNavigate: propOnNavigate }) {
                 </div>
               ))}
             </div>
+          ) : error ? (
+            /* 5b. Error state with retry */
+            <div className="min-h-[240px] flex flex-col items-center justify-center p-6 text-center">
+              <div className="w-10 h-10 rounded-lg bg-surface border border-danger/30 flex items-center justify-center text-danger mb-3">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-semibold text-text">Failed to load invoices</h3>
+              <p className="text-xs text-muted mt-1 max-w-sm">
+                {error || 'Unable to load invoices. Please check your connection.'}
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={loadInvoices}
+                className="mt-4"
+              >
+                Retry
+              </Button>
+            </div>
           ) : isEntirelyEmpty ? (
-            /* 5b. Entirely empty — no invoices at all */
+            /* 5c. Entirely empty — no invoices at all */
             <div className="min-h-[240px] flex flex-col items-center justify-center p-6 text-center">
               <div className="w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center text-muted mb-3">
                 <FileText className="w-5 h-5" />
@@ -566,9 +587,9 @@ export function Invoices({ onNavigate: propOnNavigate }) {
                     const hasCustomerId = !!(inv.customerId || inv.customer?.id || inv.customer?._id);
                     const net = Number(inv.netTotal ?? inv.grandTotal) || 0;
                     const handleRowClick = () =>
-                      isDraft
-                        ? onNavigate('edit-invoice', targetId)
-                        : onNavigate('invoice-details', targetId);
+                      onNavigate(isDraft ? 'edit-invoice' : 'invoice-details', targetId, {
+                        state: { from: location.pathname + location.search }
+                      });
 
                     return (
                       <div
@@ -584,7 +605,14 @@ export function Invoices({ onNavigate: propOnNavigate }) {
                           className="font-medium text-text truncate"
                           title={inv.invoiceNumber || 'INV-DRAFT'}
                         >
-                          {inv.invoiceNumber || 'INV-DRAFT'}
+                          <Link
+                            to={isDraft ? `/app/invoices/${targetId}/edit` : `/app/invoices/${targetId}`}
+                            state={{ from: location.pathname + location.search }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="hover:underline hover:text-accent font-medium text-text truncate inline-block max-w-full"
+                          >
+                            {inv.invoiceNumber || 'INV-DRAFT'}
+                          </Link>
                         </div>
 
                         {/* Customer — links to customer page when real customer id exists */}
@@ -654,9 +682,9 @@ export function Invoices({ onNavigate: propOnNavigate }) {
                   const customerName = inv.customer?.name || inv.customerName || 'Walk-in Customer';
                   const net = Number(inv.netTotal ?? inv.grandTotal) || 0;
                   const handleCardClick = () =>
-                    isDraft
-                      ? onNavigate('edit-invoice', targetId)
-                      : onNavigate('invoice-details', targetId);
+                    onNavigate(isDraft ? 'edit-invoice' : 'invoice-details', targetId, {
+                      state: { from: location.pathname + location.search }
+                    });
 
                   return (
                     <div
@@ -669,9 +697,14 @@ export function Invoices({ onNavigate: propOnNavigate }) {
                     >
                       {/* Top: Invoice no. + Amount + Kebab */}
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-text text-sm truncate">
+                        <Link
+                          to={isDraft ? `/app/invoices/${targetId}/edit` : `/app/invoices/${targetId}`}
+                          state={{ from: location.pathname + location.search }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-semibold text-text text-sm truncate hover:underline hover:text-accent"
+                        >
                           {inv.invoiceNumber || 'INV-DRAFT'}
-                        </span>
+                        </Link>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-sm font-semibold text-text tabular-nums">
                             {formatCurrency(net)}

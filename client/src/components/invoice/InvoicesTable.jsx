@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { formatCurrency } from '../../utils/currency';
 import { Eye, Edit3, Download, Copy, XCircle, FileText } from 'lucide-react';
 import { DropdownMenu } from '../ui/DropdownMenu';
@@ -172,22 +173,33 @@ export function InvoicesTable({
         <div className="divide-y divide-border">
           {invoices.map((inv) => {
             const targetId = inv._id || inv.id;
+            const isDraft = inv.status === 'Draft';
             const net = Number(inv.netTotal ?? inv.grandTotal) || 0;
+            const targetRoute = isDraft ? `/app/invoices/${targetId}/edit` : `/app/invoices/${targetId}`;
+            const handleRowClick = () =>
+              onNavigate?.(isDraft ? 'edit-invoice' : 'invoice-details', targetId);
 
             return (
               <div
                 key={targetId}
                 role="button"
                 tabIndex={0}
-                onClick={() => onNavigate?.('invoice-details', targetId)}
+                onClick={handleRowClick}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') onNavigate?.('invoice-details', targetId);
+                  if (e.key === 'Enter') handleRowClick();
                 }}
                 className={`${INVOICES_GRID_CLASS} h-14 hover:bg-surface/50 transition-colors cursor-pointer text-xs focus:outline-none focus:bg-surface/50`}
               >
                 {/* Invoice no. */}
                 <div className="font-medium text-text truncate">
-                  {inv.invoiceNumber || 'INV-DRAFT'}
+                  <Link
+                    to={targetRoute}
+                    onClick={(e) => e.stopPropagation()}
+                    className="hover:underline hover:text-accent font-medium text-text truncate inline-block max-w-full"
+                    title={inv.invoiceNumber || 'INV-DRAFT'}
+                  >
+                    {inv.invoiceNumber || 'INV-DRAFT'}
+                  </Link>
                 </div>
 
                 {/* Date */}
@@ -222,24 +234,32 @@ export function InvoicesTable({
       <div className="md:hidden divide-y divide-border">
         {invoices.map((inv) => {
           const targetId = inv._id || inv.id;
+          const isDraft = inv.status === 'Draft';
           const net = Number(inv.netTotal ?? inv.grandTotal) || 0;
+          const targetRoute = isDraft ? `/app/invoices/${targetId}/edit` : `/app/invoices/${targetId}`;
+          const handleCardClick = () =>
+            onNavigate?.(isDraft ? 'edit-invoice' : 'invoice-details', targetId);
 
           return (
             <div
               key={targetId}
               role="button"
               tabIndex={0}
-              onClick={() => onNavigate?.('invoice-details', targetId)}
+              onClick={handleCardClick}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') onNavigate?.('invoice-details', targetId);
+                if (e.key === 'Enter') handleCardClick();
               }}
               className="p-4 space-y-2 hover:bg-surface/50 transition-colors cursor-pointer focus:outline-none focus:bg-surface/50"
             >
               {/* Top: Invoice No. + Amount + Actions */}
               <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-text text-sm truncate">
+                <Link
+                  to={targetRoute}
+                  onClick={(e) => e.stopPropagation()}
+                  className="font-semibold text-text text-sm truncate hover:underline hover:text-accent"
+                >
                   {inv.invoiceNumber || 'INV-DRAFT'}
-                </span>
+                </Link>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-sm font-semibold text-text tabular-nums text-right">
                     {formatCurrency(net)}

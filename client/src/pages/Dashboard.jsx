@@ -133,7 +133,8 @@ const PERIOD_OPTIONS = ['This month', 'Last 6 months', 'FY 2026-27', 'All time']
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
+  const isAuthReady = Boolean(isLoaded && isSignedIn);
 
   // Chart Tab: 'rt' = Revenue & tax, 'gb' = GST breakdown
   const [chartTab, setChartTab] = useState('rt');
@@ -152,11 +153,12 @@ export function Dashboard() {
       setError(null);
       const [invRes, custRes] = await Promise.all([
         invoicesApi.list({ limit: 100 }),
-        customersApi.list({ limit: 100 }),
+        customersApi.list({ limit: 1 }),
       ]);
 
       const invList = Array.isArray(invRes?.data) ? invRes.data : (invRes?.data?.invoices || []);
       const custTotal =
+        custRes?.meta?.total ??
         custRes?.data?.total ??
         custRes?.pagination?.total ??
         (Array.isArray(custRes?.data) ? custRes.data.length : (custRes?.data?.customers?.length || 0));
@@ -172,10 +174,13 @@ export function Dashboard() {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthReady) {
       loadRealData();
+    } else if (isLoaded && !isSignedIn) {
+      // Clerk has finished loading but user is not signed in — stop spinning
+      setLoading(false);
     }
-  }, [isAuthenticated, loadRealData]);
+  }, [isAuthReady, loadRealData]);
 
   // 6-month timeline structure
   const last6Months = useMemo(() => getLast6Months(), []);

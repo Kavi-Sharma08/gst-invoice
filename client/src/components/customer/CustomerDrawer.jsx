@@ -13,7 +13,8 @@
 import React, {
   useState, useEffect, useRef, useCallback, useId
 } from 'react';
-import { X, ChevronDown, Loader2, AlertCircle, Plus } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { X, ChevronDown, Loader2, AlertCircle, AlertTriangle, Plus, ExternalLink } from 'lucide-react';
 import {
   Field, Input, Select, Button, Textarea
 } from '../invoice/InvoiceEditorUI';
@@ -25,6 +26,8 @@ import {
   normalizeCustomerType,
 } from '../../utils/customer';
 import { useUnsavedChanges } from '../../utils/useUnsavedChanges';
+import { customersApi } from '../../api/customers.api';
+import { useAppNavigate } from '../../utils/navigation';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -77,6 +80,8 @@ export function CustomerDrawer({
   initialData = null,
   prefillName = '',
 }) {
+  const queryClient = useQueryClient();
+  const appNavigate = useAppNavigate();
   const isEditing = Boolean(initialData);
 
   const [form,               setForm]              = useState(EMPTY_FORM());
@@ -88,6 +93,9 @@ export function CustomerDrawer({
   const [saving,     setSaving]    = useState(false);
   const [saveError,  setSaveError] = useState('');
   const [gstinValid, setGstinValid]= useState(null); // null | {isValid, message}
+  const [gstinDuplicateInfo, setGstinDuplicateInfo] = useState(null); // null | { existingId, existingName, isArchived }
+  const [saveWarnings, setSaveWarnings] = useState([]);
+  const [restoring,  setRestoring] = useState(false);
   const [showContact, setShowContact] = useState(false);
 
   const nameRef          = useRef(null);
@@ -99,6 +107,8 @@ export function CustomerDrawer({
   useEffect(() => {
     if (isOpen) {
       setConfirmingDiscard(false);
+      setGstinDuplicateInfo(null);
+      setSaveWarnings([]);
       let f;
       if (initialData) {
         const normalizedType = normalizeCustomerType(
@@ -274,16 +284,34 @@ export function CustomerDrawer({
     return true;
   };
 
+  // ── Restore duplicate handler ─────────────────────────────────────────────
+  const handleRestoreDuplicate = async () => {
+    if (!gstinDuplicateInfo?.existingId) return;
+    try {
+      setRestoring(true);
+      await customersApi.unarchive(gstinDuplicateInfo.existingId);
+      await queryClient.invalidateQueries({ queryKey: ['customers'] });
+      onClose();
+      appNavigate('customer-details', gstinDuplicateInfo.existingId);
+    } catch (err) {
+      setSaveError(err.message || 'Failed to restore customer.');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async e => {
     e.preventDefault();
     if (!validate()) return;
     setSaveError('');
+    setGstinDuplicateInfo(null);
+    setSaveWarnings([]);
     try {
       setSaving(true);
       const payload = {
         name:         form.name.trim(),
-        customerType: form.customerType,
+        customerType: form.customerType === CUSTOMER_TYPES.REGISTERED ? 'registered' : 'unregistered',
         gstin:        form.customerType === CUSTOMER_TYPES.REGISTERED ? form.gstin.trim() : '',
         state:        form.state,
         email:        form.email.trim(),
@@ -292,9 +320,21 @@ export function CustomerDrawer({
       };
       const saved = await onSave(payload);
       resetBaseline(form);
+      if (saved?.meta?.warnings?.length) {
+        setSaveWarnings(saved.meta.warnings);
+      }
       return saved;
     } catch (err) {
-      setSaveError(err.message || 'Failed to save customer. Please try again.');
+      if (err.code === 'DUPLICATE_GSTIN') {
+        const details = err.details || err.fields || {};
+        setGstinDuplicateInfo(details);
+        setSaveError('');
+      } else {
+        if (err.fields && typeof err.fields === 'object') {
+          setErrors(prev => ({ ...prev, ...err.fields }));
+        }
+        setSaveError(err.message || 'Failed to save customer. Please try again.');
+      }
     } finally {
       setSaving(false);
     }
@@ -347,6 +387,19 @@ export function CustomerDrawer({
             <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{saveError}</span>
+            </div>
+          )}
+
+          {/* Non-blocking warnings note after saving */}
+          {saveWarnings.length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="space-y-0.5 text-xs text-text">
+                <p className="font-semibold text-warning">Note</p>
+                {saveWarnings.map((w, idx) => (
+                  <p key={idx}>{w.message || w}</p>
+                ))}
+              </div>
             </div>
           )}
 
@@ -417,6 +470,37 @@ export function CustomerDrawer({
                   onChange={handleGstinChange}
                   onBlur={handleGstinBlur}
                 />
+                {gstinDuplicateInfo && (
+                  <div className="mt-2.5 p-3 rounded-lg border border-warning/30 bg-warning/10 text-xs text-text space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-medium text-warning">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>A customer with this GSTIN already exists.</span>
+                    </div>
+                    <div className="flex items-center gap-3 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          appNavigate('customer-details', gstinDuplicateInfo.existingId);
+                        }}
+                        className="inline-flex items-center gap-1 text-accent hover:underline font-medium cursor-pointer"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>Open {gstinDuplicateInfo.existingName || 'customer'}</span>
+                      </button>
+                      {gstinDuplicateInfo.isArchived && (
+                        <button
+                          type="button"
+                          onClick={handleRestoreDuplicate}
+                          disabled={restoring}
+                          className="text-warning hover:underline font-medium cursor-pointer disabled:opacity-50"
+                        >
+                          {restoring ? 'Restoring…' : 'Restore'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </Field>
             )}
 

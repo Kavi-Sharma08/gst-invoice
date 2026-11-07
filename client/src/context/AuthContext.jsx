@@ -44,6 +44,9 @@ export function AuthProvider({ children }) {
         user,
         isAuthenticated: !!clerkUser,
         isLoading: !isLoaded,
+        // Clerk-compatible aliases used by pages that do `const { isLoaded, isSignedIn } = useAuth()`
+        isLoaded,
+        isSignedIn: !!clerkUser,
         logout
       }}
     >
