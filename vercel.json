@@ -3,7 +3,7 @@
   "outputDirectory": "client/dist",
   "rewrites": [
     {
-      "source": "/((?!__clerk).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
