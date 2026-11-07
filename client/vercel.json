@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    {
+      "source": "/((?!__clerk).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+

@@ -8,6 +8,7 @@
     "worker"
   ],
   "scripts": {
+    "build": "npm --workspace=client run build",
     "dev:client": "npm --workspace=client run dev",
     "dev:server": "npm --workspace=server run dev",
     "dev:worker": "npm --workspace=worker run dev",
