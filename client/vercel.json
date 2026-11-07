@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/__clerk/:path*",
-      "destination": "https://frontend-api.clerk.dev/:path*"
+      "destination": "https://trusty-slug-321.clerk.accounts.dev/:path*"
     },
     {
       "source": "/(.*)",
