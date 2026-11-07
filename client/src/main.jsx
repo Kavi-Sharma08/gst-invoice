@@ -8,10 +8,14 @@ import App from './App.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+// In production the serverless function at /api/__clerk/[...path].js handles
+// all Clerk FAPI calls and injects Clerk-Proxy-Url + Clerk-Secret-Key headers.
+// VITE_CLERK_PROXY_URL can override this (e.g. for a custom domain).
 const PROXY_URL =
   import.meta.env.VITE_CLERK_PROXY_URL ||
-  (typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')
-    ? `https://${window.location.hostname}/__clerk`
+  (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+    ? `${window.location.origin}/__clerk`
     : undefined);
 
 if (!PUBLISHABLE_KEY) {

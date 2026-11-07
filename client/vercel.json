@@ -1,13 +1,5 @@
 {
   "rewrites": [
-    {
-      "source": "/__clerk/:path*",
-      "destination": "https://trusty-slug-321.clerk.accounts.dev/:path*"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
-
