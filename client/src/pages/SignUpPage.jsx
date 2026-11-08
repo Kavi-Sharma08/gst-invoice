@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { SignUp } from '@clerk/clerk-react';
 import { useAuth } from '../context/AuthContext';
 import { LoadingFallback } from '../components/ui/LoadingFallback';
+import { clerkAppearance } from '../lib/clerkAppearance';
 
 export function SignUpPage() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -40,19 +41,7 @@ export function SignUpPage() {
         fallbackRedirectUrl="/app/dashboard"
         signInForceRedirectUrl="/app/dashboard"
         signInFallbackRedirectUrl="/app/dashboard"
-        appearance={{
-          variables: {
-            colorPrimary: '#4F46E5',
-            colorText: '#FAFAFA',
-            colorBackground: '#111113',
-            colorInputBackground: '#09090B',
-            colorInputText: '#FAFAFA',
-            borderRadius: '0.75rem'
-          },
-          elements: {
-            card: 'shadow-sm border border-[#27272A] bg-[#111113]'
-          }
-        }}
+        appearance={clerkAppearance}
       />
     </div>
   );
