@@ -5,6 +5,7 @@ import {
   Navigate,
   useParams
 } from 'react-router-dom';
+import { AuthenticateWithRedirectCallback } from '@clerk/clerk-react';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoadingFallback } from './components/ui/LoadingFallback';
 import { AceternitySidebar } from './components/layout/AceternitySidebar';
@@ -68,6 +69,14 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
 
         {/* Public Auth routes */}
+        <Route
+          path="/sign-in/sso-callback"
+          element={<AuthenticateWithRedirectCallback signInForceRedirectUrl="/app/dashboard" />}
+        />
+        <Route
+          path="/sign-up/sso-callback"
+          element={<AuthenticateWithRedirectCallback signUpForceRedirectUrl="/app/dashboard" />}
+        />
         <Route path="/sign-in/*" element={<SignInPage />} />
         <Route path="/sign-up/*" element={<SignUpPage />} />
 

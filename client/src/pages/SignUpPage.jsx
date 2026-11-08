@@ -38,6 +38,8 @@ export function SignUpPage() {
         signInUrl={`/sign-in${safeRedirectUrl !== '/app/dashboard' ? `?redirect_url=${encodeURIComponent(safeRedirectUrl)}` : ''}`}
         forceRedirectUrl={safeRedirectUrl}
         fallbackRedirectUrl="/app/dashboard"
+        signInForceRedirectUrl="/app/dashboard"
+        signInFallbackRedirectUrl="/app/dashboard"
         appearance={{
           variables: {
             colorPrimary: '#4F46E5',

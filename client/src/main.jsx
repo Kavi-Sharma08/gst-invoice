@@ -26,7 +26,12 @@ export const queryClient = new QueryClient({
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <ClerkProvider publishableKey={PUBLISHABLE_KEY} proxyUrl={PROXY_URL}>
+    <ClerkProvider
+      publishableKey={PUBLISHABLE_KEY}
+      proxyUrl={PROXY_URL}
+      signInFallbackRedirectUrl="/app/dashboard"
+      signUpFallbackRedirectUrl="/app/dashboard"
+    >
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <AuthProvider>
