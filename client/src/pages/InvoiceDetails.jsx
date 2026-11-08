@@ -185,6 +185,19 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
     }
   });
 
+  // Uniform GST rate calculation across line items (unconditional hook before early returns)
+  const uniformGstRate = useMemo(() => {
+    const items = invoice?.items || [];
+    const taxType = invoice?.taxType || 'INTRA';
+    if (!items.length) return null;
+    const firstRate = taxType === 'INTRA' ? items[0].cgstRate : items[0].igstRate;
+    const allMatch = items.every((item) => {
+      const r = taxType === 'INTRA' ? item.cgstRate : item.igstRate;
+      return Number(r) === Number(firstRate);
+    });
+    return allMatch ? Number(firstRate) : null;
+  }, [invoice?.items, invoice?.taxType]);
+
   const handleDuplicate = () => {
     if (!invoice) return;
     const targetId = invoice._id || invoice.id;
@@ -499,17 +512,6 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
 
     return menu;
   };
-
-  // Uniform GST rate calculation across line items
-  const uniformGstRate = useMemo(() => {
-    if (!items.length) return null;
-    const firstRate = taxType === 'INTRA' ? items[0].cgstRate : items[0].igstRate;
-    const allMatch = items.every((item) => {
-      const r = taxType === 'INTRA' ? item.cgstRate : item.igstRate;
-      return Number(r) === Number(firstRate);
-    });
-    return allMatch ? Number(firstRate) : null;
-  }, [items, taxType]);
 
   // Build activity timeline items from existing timestamps
   const activityEvents = [];
