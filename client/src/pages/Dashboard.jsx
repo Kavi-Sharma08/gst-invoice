@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSession } from '@clerk/clerk-react';
 import {
   IndianRupee,
   Percent,
@@ -134,16 +133,8 @@ const PERIOD_OPTIONS = ['This month', 'Last 6 months', 'FY 2026-27', 'All time']
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const { session } = useSession();
   const { isLoaded, isSignedIn } = useAuth();
   const isAuthReady = Boolean(isLoaded && isSignedIn);
-
-  // TEMPORARY DEBUG LOG: Read pending Clerk session status & current task
-  useEffect(() => {
-    if (session) {
-      console.log('[CLERK DEBUG] session.status:', session.status, '| session.currentTask:', session.currentTask);
-    }
-  }, [session]);
 
   // Chart Tab: 'rt' = Revenue & tax, 'gb' = GST breakdown
   const [chartTab, setChartTab] = useState('rt');
