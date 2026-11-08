@@ -21,31 +21,32 @@ export class ApiError extends Error {
 
 /**
  * Retrieves the current Clerk session token.
- * Falls back to null if Clerk is not yet initialized or user is signed out.
+ * Waits for Clerk to finish loading and ensures the session is active.
+ * Falls back to null if Clerk is not yet initialized or session is not active.
  * @returns {Promise<string|null>}
  */
 async function getClerkToken() {
   try {
     if (typeof window === 'undefined') return null;
 
-    if (window.Clerk?.session) {
-      return await window.Clerk.session.getToken();
-    }
-
-    if (window.Clerk && !window.Clerk.loaded) {
+    // Wait until window.Clerk is initialized and loaded (up to 3 seconds)
+    if (!window.Clerk?.loaded) {
       await new Promise((resolve) => {
         let attempts = 0;
         const interval = setInterval(() => {
           attempts++;
-          if (window.Clerk?.loaded || window.Clerk?.session || attempts > 30) {
+          if (window.Clerk?.loaded || attempts > 60) {
             clearInterval(interval);
             resolve();
           }
         }, 50);
       });
-      if (window.Clerk?.session) {
-        return await window.Clerk.session.getToken();
-      }
+    }
+
+    const session = window.Clerk?.session;
+    // Only fetch tokens from confirmed active sessions
+    if (session && session.status === 'active') {
+      return await session.getToken();
     }
 
     return null;
@@ -63,12 +64,21 @@ async function request(path, options = {}) {
   const url = `${API_BASE}${path}`;
   const token = await getClerkToken();
 
+  // Guard: do not fire authenticated API requests if token is missing or session is not active
+  if (!token) {
+    throw new ApiError(
+      'Authentication required. Missing active Clerk session token.',
+      401,
+      'UNAUTHORIZED'
+    );
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   const headers = {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    Authorization: `Bearer ${token}`,
     ...options.headers
   };
 

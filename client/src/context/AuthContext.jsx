@@ -1,27 +1,29 @@
 /**
  * AuthContext — thin wrapper around Clerk hooks.
  *
- * Provides the same interface as the old custom auth context so that
- * existing consumers (App.jsx, pages, etc.) require zero changes:
- *   { user, isAuthenticated, isLoading, logout }
+ * Provides the interface for consumers:
+ *   { user, isAuthenticated, isLoading, isLoaded, isSignedIn, session, logout }
  *
- * Sign-in / sign-up is now handled by Clerk's hosted UI (SignIn / SignUp
- * components), so `login` and `register` functions are no longer needed.
+ * Enforces that `isAuthenticated` and `isSignedIn` are only true when
+ * `session.status === 'active'`, preventing pending session tasks from
+ * triggering authenticated operations prematurely.
  */
 
 import { createContext, useContext } from 'react';
-import { useUser, useClerk } from '@clerk/clerk-react';
+import { useUser, useClerk, useSession } from '@clerk/clerk-react';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  // useUser gives us the Clerk User object and loading state
-  const { user: clerkUser, isLoaded } = useUser();
+  const { user: clerkUser, isLoaded: isUserLoaded } = useUser();
+  const { session, isLoaded: isSessionLoaded } = useSession();
   const { signOut } = useClerk();
+
+  const isLoaded = Boolean(isUserLoaded && isSessionLoaded);
+  const isActive = session?.status === 'active';
 
   /**
    * Normalised user shape expected by the rest of the app.
-   * Clerk user IDs look like "user_2abc...".
    */
   const user = clerkUser
     ? {
@@ -42,11 +44,11 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider
       value={{
         user,
-        isAuthenticated: !!clerkUser,
+        isAuthenticated: Boolean(clerkUser && isActive),
         isLoading: !isLoaded,
-        // Clerk-compatible aliases used by pages that do `const { isLoaded, isSignedIn } = useAuth()`
         isLoaded,
-        isSignedIn: !!clerkUser,
+        isSignedIn: Boolean(clerkUser && isActive),
+        session,
         logout
       }}
     >
