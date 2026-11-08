@@ -1,46 +1,13 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-import { ClerkProvider } from '@clerk/clerk-react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import './index.css';
-import App from './App.jsx';
-import { AuthProvider } from './context/AuthContext.jsx';
-import { clerkAppearance } from './lib/clerkAppearance';
-
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-const PROXY_URL = import.meta.env.VITE_CLERK_PROXY_URL;
-
-if (!PUBLISHABLE_KEY) {
-  throw new Error('Missing Vite environment variable: VITE_CLERK_PUBLISHABLE_KEY');
-}
-
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30000,
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+import { AppProviders } from '@/app/AppProviders';
+import { App } from '@/app/App';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <ClerkProvider
-      publishableKey={PUBLISHABLE_KEY}
-      proxyUrl={PROXY_URL}
-      appearance={clerkAppearance}
-      signInFallbackRedirectUrl="/app/dashboard"
-      signUpFallbackRedirectUrl="/app/dashboard"
-    >
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
-    </ClerkProvider>
+    <AppProviders>
+      <App />
+    </AppProviders>
   </StrictMode>
 );
