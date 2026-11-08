@@ -9,3 +9,4 @@ export function SignInSsoCallback() {
 export function SignUpSsoCallback() {
   return <AuthenticateWithRedirectCallback signUpForceRedirectUrl={PATHS.APP.DASHBOARD} />;
 }
+

@@ -23,3 +23,4 @@ export const workspaceRoutes = [
 ];
 
 export default workspaceRoutes;
+
