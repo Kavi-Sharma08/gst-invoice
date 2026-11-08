@@ -19,6 +19,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useLocation, useNavigate, Link, Navigate, useSearchParams } from 'react-router-dom';
+import { PATHS } from '@/app/routes/paths';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -310,7 +311,7 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
   if (invoice && invoice.status === 'Draft' && !allowDraftView) {
     return (
       <Navigate
-        to={`/app/invoices/${invoice._id || invoice.id}/edit`}
+        to={PATHS.APP.invoiceEdit(invoice._id || invoice.id)}
         replace
         state={location.state}
       />
@@ -640,7 +641,7 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
             <span className="text-[11px] text-muted block">Customer</span>
             {hasRealCustomerId ? (
               <Link
-                to={`/app/customers/${customerId}`}
+                to={PATHS.APP.customer(customerId)}
                 className="font-medium text-text hover:text-accent hover:underline truncate block"
               >
                 {customerName}
@@ -1006,7 +1007,7 @@ export function InvoiceDetails({ invoiceId: propInvoiceId, onNavigate: propOnNav
                   <span className="text-muted">Customer</span>
                   {hasRealCustomerId ? (
                     <Link
-                      to={`/app/customers/${customerId}`}
+                      to={PATHS.APP.customer(customerId)}
                       className="font-medium text-text hover:text-accent hover:underline text-right truncate max-w-[180px]"
                     >
                       {customerName}

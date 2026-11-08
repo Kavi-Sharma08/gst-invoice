@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { PATHS } from '@/app/routes/paths';
 import { formatCurrency } from '../../utils/currency';
 import { Eye, Edit3, Download, Copy, XCircle, FileText } from 'lucide-react';
 import { DropdownMenu } from '../ui/DropdownMenu';
@@ -175,7 +176,7 @@ export function InvoicesTable({
             const targetId = inv._id || inv.id;
             const isDraft = inv.status === 'Draft';
             const net = Number(inv.netTotal ?? inv.grandTotal) || 0;
-            const targetRoute = isDraft ? `/app/invoices/${targetId}/edit` : `/app/invoices/${targetId}`;
+            const targetRoute = isDraft ? PATHS.APP.invoiceEdit(targetId) : PATHS.APP.invoice(targetId);
             const handleRowClick = () =>
               onNavigate?.(isDraft ? 'edit-invoice' : 'invoice-details', targetId);
 
@@ -236,7 +237,7 @@ export function InvoicesTable({
           const targetId = inv._id || inv.id;
           const isDraft = inv.status === 'Draft';
           const net = Number(inv.netTotal ?? inv.grandTotal) || 0;
-          const targetRoute = isDraft ? `/app/invoices/${targetId}/edit` : `/app/invoices/${targetId}`;
+          const targetRoute = isDraft ? PATHS.APP.invoiceEdit(targetId) : PATHS.APP.invoice(targetId);
           const handleCardClick = () =>
             onNavigate?.(isDraft ? 'edit-invoice' : 'invoice-details', targetId);
 

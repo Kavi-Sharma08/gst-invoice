@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PATHS } from '@/app/routes/paths';
 import {
   IndianRupee,
   Percent,
@@ -416,7 +417,7 @@ export function Dashboard() {
           <Button
             variant="primary"
             size="md"
-            onClick={() => navigate('/app/invoices/new')}
+            onClick={() => navigate(PATHS.APP.INVOICE_NEW)}
             className="h-10 px-4 rounded-lg shrink-0 sm:ml-auto"
           >
             <Plus className="w-4 h-4 mr-1.5" />
@@ -617,7 +618,7 @@ export function Dashboard() {
                   return (
                     <div
                       key={id}
-                      onClick={() => navigate(`/app/invoices/${id}`)}
+                      onClick={() => navigate(PATHS.APP.invoice(id))}
                       className="py-2.5 flex items-center justify-between gap-3 hover:bg-surface-hover transition-colors cursor-pointer -mx-1 px-1 rounded-md"
                     >
                       <div className="min-w-0">
@@ -652,7 +653,7 @@ export function Dashboard() {
               <h2 className="text-[14px] font-semibold text-text">Recent invoices</h2>
               <button
                 type="button"
-                onClick={() => navigate('/app/invoices')}
+                onClick={() => navigate(PATHS.APP.INVOICES)}
                 className="text-xs font-medium text-accent hover:underline cursor-pointer"
               >
                 View all
@@ -669,7 +670,7 @@ export function Dashboard() {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => navigate('/app/invoices/new')}
+                  onClick={() => navigate(PATHS.APP.INVOICE_NEW)}
                   className="mt-3"
                 >
                   <Plus className="w-3.5 h-3.5 mr-1" />
@@ -696,7 +697,7 @@ export function Dashboard() {
                       return (
                         <div
                           key={id}
-                          onClick={() => navigate(`/app/invoices/${id}`)}
+                          onClick={() => navigate(PATHS.APP.invoice(id))}
                           className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_100px] gap-3 px-3 py-3 items-center hover:bg-surface-hover transition-colors cursor-pointer text-xs"
                         >
                           <span className="font-semibold text-text truncate">

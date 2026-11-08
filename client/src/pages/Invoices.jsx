@@ -14,6 +14,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, Link, useLocation } from 'react-router-dom';
+import { PATHS } from '@/app/routes/paths';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Plus,
@@ -606,7 +607,7 @@ export function Invoices({ onNavigate: propOnNavigate }) {
                           title={inv.invoiceNumber || 'INV-DRAFT'}
                         >
                           <Link
-                            to={isDraft ? `/app/invoices/${targetId}/edit` : `/app/invoices/${targetId}`}
+                            to={isDraft ? PATHS.APP.invoiceEdit(targetId) : PATHS.APP.invoice(targetId)}
                             state={{ from: location.pathname + location.search }}
                             onClick={(e) => e.stopPropagation()}
                             className="hover:underline hover:text-accent font-medium text-text truncate inline-block max-w-full"
@@ -698,7 +699,7 @@ export function Invoices({ onNavigate: propOnNavigate }) {
                       {/* Top: Invoice no. + Amount + Kebab */}
                       <div className="flex items-center justify-between gap-2">
                         <Link
-                          to={isDraft ? `/app/invoices/${targetId}/edit` : `/app/invoices/${targetId}`}
+                          to={isDraft ? PATHS.APP.invoiceEdit(targetId) : PATHS.APP.invoice(targetId)}
                           state={{ from: location.pathname + location.search }}
                           onClick={(e) => e.stopPropagation()}
                           className="font-semibold text-text text-sm truncate hover:underline hover:text-accent"

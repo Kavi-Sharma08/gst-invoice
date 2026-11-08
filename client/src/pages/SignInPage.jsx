@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { SignIn } from '@clerk/clerk-react';
+import { PATHS } from '@/app/routes/paths';
 import { useAuth } from '../context/AuthContext';
 import { LoadingFallback } from '../components/ui/LoadingFallback';
 import { clerkAppearance } from '../lib/clerkAppearance';
@@ -12,9 +13,9 @@ export function SignInPage() {
   const searchParams = new URLSearchParams(location.search);
   const paramRedirect = searchParams.get('redirect_url');
   const stateRedirect = location.state?.from?.pathname;
-  const redirectTarget = paramRedirect || stateRedirect || '/app/dashboard';
+  const redirectTarget = paramRedirect || stateRedirect || PATHS.APP.DASHBOARD;
   // Ensure we only redirect internally within the app workspace
-  const safeRedirectUrl = redirectTarget.startsWith('/app') ? redirectTarget : '/app/dashboard';
+  const safeRedirectUrl = redirectTarget.startsWith(PATHS.APP.ROOT) ? redirectTarget : PATHS.APP.DASHBOARD;
 
   if (isLoading) {
     return <LoadingFallback message="Checking session..." />;
@@ -36,12 +37,12 @@ export function SignInPage() {
 
       <SignIn
         routing="path"
-        path="/sign-in"
-        signUpUrl={`/sign-up${safeRedirectUrl !== '/app/dashboard' ? `?redirect_url=${encodeURIComponent(safeRedirectUrl)}` : ''}`}
+        path={PATHS.AUTH.SIGN_IN}
+        signUpUrl={`${PATHS.AUTH.SIGN_UP}${safeRedirectUrl !== PATHS.APP.DASHBOARD ? `?redirect_url=${encodeURIComponent(safeRedirectUrl)}` : ''}`}
         forceRedirectUrl={safeRedirectUrl}
-        fallbackRedirectUrl="/app/dashboard"
-        signUpForceRedirectUrl="/app/dashboard"
-        signUpFallbackRedirectUrl="/app/dashboard"
+        fallbackRedirectUrl={PATHS.APP.DASHBOARD}
+        signUpForceRedirectUrl={PATHS.APP.DASHBOARD}
+        signUpFallbackRedirectUrl={PATHS.APP.DASHBOARD}
         appearance={clerkAppearance}
       />
     </div>

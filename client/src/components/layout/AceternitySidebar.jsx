@@ -12,25 +12,26 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import { PATHS } from '@/app/routes/paths';
 import { useAuth } from '../../context/AuthContext';
 
 const MAIN_NAV_LINKS = [
-  { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/app/invoices', label: 'Invoices', icon: FileText },
-  { to: '/app/customers', label: 'Customers', icon: Users },
-  { to: '/app/products', label: 'Products & services', icon: Package },
+  { to: PATHS.APP.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard },
+  { to: PATHS.APP.INVOICES, label: 'Invoices', icon: FileText },
+  { to: PATHS.APP.CUSTOMERS, label: 'Customers', icon: Users },
+  { to: PATHS.APP.PRODUCTS, label: 'Products & services', icon: Package },
 ];
 
 function getPageName(pathname) {
-  if (pathname === '/app' || pathname === '/app/' || pathname === '/app/dashboard') return 'Dashboard';
-  if (pathname === '/app/invoices/new') return 'New invoice';
-  if (pathname.startsWith('/app/invoices/') && pathname.endsWith('/edit')) return 'Edit invoice';
-  if (pathname.startsWith('/app/invoices/')) return 'Invoice';
-  if (pathname.startsWith('/app/invoices')) return 'Invoices';
-  if (pathname.startsWith('/app/customers/')) return 'Customer';
-  if (pathname.startsWith('/app/customers')) return 'Customers';
-  if (pathname.startsWith('/app/products')) return 'Products & services';
-  if (pathname.startsWith('/app/settings')) return 'Settings';
+  if (pathname === PATHS.APP.ROOT || pathname === `${PATHS.APP.ROOT}/` || pathname === PATHS.APP.DASHBOARD) return 'Dashboard';
+  if (pathname === PATHS.APP.INVOICE_NEW) return 'New invoice';
+  if (pathname.startsWith(`${PATHS.APP.INVOICES}/`) && pathname.endsWith('/edit')) return 'Edit invoice';
+  if (pathname.startsWith(`${PATHS.APP.INVOICES}/`)) return 'Invoice';
+  if (pathname.startsWith(PATHS.APP.INVOICES)) return 'Invoices';
+  if (pathname.startsWith(`${PATHS.APP.CUSTOMERS}/`)) return 'Customer';
+  if (pathname.startsWith(PATHS.APP.CUSTOMERS)) return 'Customers';
+  if (pathname.startsWith(PATHS.APP.PRODUCTS)) return 'Products & services';
+  if (pathname.startsWith(PATHS.APP.SETTINGS)) return 'Settings';
   return '';
 }
 
@@ -68,11 +69,11 @@ export function AceternitySidebar() {
   }, [mobileOpen]);
 
   const isLinkActive = (to) => {
-    if (to === '/app/dashboard') {
+    if (to === PATHS.APP.DASHBOARD) {
       return (
-        location.pathname === '/app/dashboard' ||
-        location.pathname === '/app' ||
-        location.pathname === '/app/'
+        location.pathname === PATHS.APP.DASHBOARD ||
+        location.pathname === PATHS.APP.ROOT ||
+        location.pathname === `${PATHS.APP.ROOT}/`
       );
     }
     return location.pathname.startsWith(to);
@@ -83,7 +84,7 @@ export function AceternitySidebar() {
       {/* ── 1. MOBILE TOP BAR (< md): full width, h-14, sticky top-0 ── */}
       <div className="md:hidden sticky top-0 z-40 w-full h-14 bg-surface border-b border-border px-4 flex items-center justify-between shrink-0">
         <Link
-          to="/app/dashboard"
+          to={PATHS.APP.DASHBOARD}
           className="flex items-center gap-2 font-semibold text-text text-base shrink-0"
         >
           <i className="w-8 h-8 rounded-lg bg-surface border border-border flex items-center justify-center not-italic font-bold text-text">
@@ -127,7 +128,7 @@ export function AceternitySidebar() {
       >
         <div className="flex items-center justify-between pb-4 border-b border-border">
           <Link
-            to="/app/dashboard"
+            to={PATHS.APP.DASHBOARD}
             className="flex items-center gap-2.5 font-semibold text-text text-base"
             onClick={() => setMobileOpen(false)}
           >
@@ -175,10 +176,10 @@ export function AceternitySidebar() {
         {/* Bottom group: Settings */}
         <div className="pt-2 pb-2 border-t border-border space-y-1">
           <NavLink
-            to="/app/settings"
+            to={PATHS.APP.SETTINGS}
             onClick={() => setMobileOpen(false)}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              isLinkActive('/app/settings')
+              isLinkActive(PATHS.APP.SETTINGS)
                 ? 'bg-border text-text font-semibold'
                 : 'text-muted hover:text-text hover:bg-border/40'
             }`}
@@ -192,7 +193,7 @@ export function AceternitySidebar() {
         <div className="pt-3 border-t border-border">
           {user && (
             <div className="flex items-center gap-2.5 px-2 py-1">
-              <UserButton afterSignOutUrl="/" />
+              <UserButton afterSignOutUrl={PATHS.ROOT} />
               <div className="min-w-0">
                 <p className="text-xs font-medium text-text truncate">{user.name || 'Account'}</p>
                 <p className="text-[11px] text-muted truncate">{user.email}</p>
@@ -209,7 +210,7 @@ export function AceternitySidebar() {
         >
           {/* Logo */}
           <Link
-            to="/app/dashboard"
+            to={PATHS.APP.DASHBOARD}
             className="flex items-center gap-3 font-semibold text-text h-10 px-1 overflow-hidden shrink-0"
           >
             <i className="w-9 h-9 rounded-lg bg-surface border border-border flex items-center justify-center not-italic font-bold text-text shrink-0">
@@ -250,10 +251,10 @@ export function AceternitySidebar() {
           {/* Bottom group: Settings */}
           <div className="pt-2 pb-1 border-t border-border overflow-hidden shrink-0">
             <NavLink
-              to="/app/settings"
+              to={PATHS.APP.SETTINGS}
               title="Settings"
               className={`flex items-center h-10 px-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isLinkActive('/app/settings')
+                isLinkActive(PATHS.APP.SETTINGS)
                   ? 'bg-border text-text font-semibold'
                   : 'text-muted hover:text-text hover:bg-border/40'
               }`}
@@ -271,7 +272,7 @@ export function AceternitySidebar() {
           <div className="pt-2 border-t border-border overflow-hidden shrink-0">
             {user && (
               <div className="flex items-center gap-2.5 px-1 py-1">
-                <UserButton afterSignOutUrl="/" />
+                <UserButton afterSignOutUrl={PATHS.ROOT} />
                 <span className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 text-xs font-medium text-muted truncate whitespace-nowrap">
                   {user.name || user.email}
                 </span>
@@ -290,7 +291,7 @@ export function AceternitySidebar() {
         {/* Header with Logo + Collapse button */}
         <div className="flex items-center justify-between h-10 px-1 overflow-hidden shrink-0">
           <Link
-            to="/app/dashboard"
+            to={PATHS.APP.DASHBOARD}
             className="flex items-center gap-3 font-semibold text-text min-w-0"
           >
             <i className="w-9 h-9 rounded-lg bg-surface border border-border flex items-center justify-center not-italic font-bold text-text shrink-0">
@@ -362,10 +363,10 @@ export function AceternitySidebar() {
         {/* Bottom group: Settings */}
         <div className="pt-2 pb-1 border-t border-border overflow-hidden shrink-0">
           <NavLink
-            to="/app/settings"
+            to={PATHS.APP.SETTINGS}
             title={isCollapsed ? 'Settings' : undefined}
             className={`flex items-center h-10 px-2.5 rounded-lg text-sm font-medium transition-colors ${
-              isLinkActive('/app/settings')
+              isLinkActive(PATHS.APP.SETTINGS)
                 ? 'bg-border text-text font-semibold'
                 : 'text-muted hover:text-text hover:bg-border/40'
             }`}
@@ -385,7 +386,7 @@ export function AceternitySidebar() {
         <div className="pt-2 border-t border-border overflow-hidden shrink-0">
           {user && (
             <div className="flex items-center gap-2.5 px-1 py-1">
-              <UserButton afterSignOutUrl="/" />
+              <UserButton afterSignOutUrl={PATHS.ROOT} />
               {!isCollapsed && (
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-text truncate">{user.name || 'Account'}</p>

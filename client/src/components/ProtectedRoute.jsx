@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useSession } from '@clerk/clerk-react';
+import { PATHS } from '@/app/routes/paths';
 import { useAuth } from '../context/AuthContext';
 import { LoadingFallback } from './ui/LoadingFallback';
 
@@ -25,7 +26,7 @@ export function ProtectedRoute({ children }) {
     const returnUrl = encodeURIComponent(location.pathname + location.search);
     return (
       <Navigate
-        to={`/sign-in?redirect_url=${returnUrl}`}
+        to={`${PATHS.AUTH.SIGN_IN}?redirect_url=${returnUrl}`}
         replace
         state={{ from: location }}
       />

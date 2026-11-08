@@ -6,6 +6,7 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { PATHS } from '@/app/routes/paths';
 import { useAuth } from '../context/AuthContext';
 import { addRipple } from '../components/magicui/ripple';
 
@@ -323,7 +324,7 @@ export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState(null);
 
   // Authenticated users go straight to dashboard; unauthenticated visitors are directed to sign in
-  const ctaDestination = isAuthenticated ? '/app/dashboard' : '/sign-in';
+  const ctaDestination = isAuthenticated ? PATHS.APP.DASHBOARD : PATHS.AUTH.SIGN_IN;
 
   const toggleFaq = (i) => setOpenFaq(prev => prev === i ? null : i);
 
