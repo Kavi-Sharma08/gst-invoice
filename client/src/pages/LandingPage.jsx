@@ -7,7 +7,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { PATHS } from '@/app/routes/paths';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '@/features/auth';
 import { addRipple } from '../components/magicui/ripple';
 
 /* ─── Design tokens (mirrored in CSS vars below) ─────────────────── */

@@ -44,7 +44,7 @@ import { DropdownMenu } from '../components/ui/DropdownMenu';
 import { Pagination } from '../components/ui/Pagination';
 import { PageHeader } from '../components/layout/PageHeader';
 
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '@/features/auth';
 import { customersApi, customerQueryKeys } from '../api/customers.api';
 import { useDebounce } from '../utils/useDebounce';
 import { useAppNavigate } from '../utils/navigation';

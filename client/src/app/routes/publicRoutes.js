@@ -3,8 +3,8 @@ import { PATHS } from '@/app/routes/paths';
 import { SignInSsoCallback, SignUpSsoCallback } from './SsoCallbacks';
 
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
-const SignInPage = lazy(() => import('@/pages/SignInPage'));
-const SignUpPage = lazy(() => import('@/pages/SignUpPage'));
+const SignInPage = lazy(() => import('@/features/auth/pages/SignInPage'));
+const SignUpPage = lazy(() => import('@/features/auth/pages/SignUpPage'));
 
 export const publicRoutes = [
   {

@@ -27,7 +27,7 @@ import {
   ChevronDown, Sparkles, AlertCircle, Eye, X
 } from 'lucide-react';
 
-import { useAuth }          from '../context/AuthContext';
+import { useAuth }          from '@/features/auth';
 import { invoicesApi }      from '../api/invoices.api';
 import { businessApi }      from '../api/business.api';
 import { customersApi }     from '../api/customers.api';

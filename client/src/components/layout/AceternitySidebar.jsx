@@ -13,7 +13,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { PATHS } from '@/app/routes/paths';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '@/features/auth';
 
 const MAIN_NAV_LINKS = [
   { to: PATHS.APP.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard },

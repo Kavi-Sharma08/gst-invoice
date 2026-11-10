@@ -58,33 +58,36 @@ export function isSafeRedirectUrl(url) {
  * @returns {string}
  */
 export function resolveRedirectTarget({ search, state, fallback = '/app/dashboard' }) {
-  let candidate = null;
-
-  // 1. Check URL query param redirect_url
+  // 1. Check URL query param redirect_url (if present and safe)
   if (search) {
     try {
       const params = new URLSearchParams(search);
-      candidate = params.get('redirect_url');
+      const paramTarget = params.get('redirect_url');
+      if (paramTarget && isSafeRedirectUrl(paramTarget)) {
+        return paramTarget.trim();
+      }
     } catch {
       // Ignore URL parse error
     }
   }
 
-  // 2. Fall back to location.state.from
-  if (!candidate && state?.from) {
+  // 2. Fall back to location.state.from (if present and safe)
+  if (state?.from) {
+    let stateTarget = null;
     if (typeof state.from === 'string') {
-      candidate = state.from;
+      stateTarget = state.from;
     } else if (typeof state.from === 'object' && state.from.pathname) {
-      candidate =
+      stateTarget =
         state.from.pathname +
         (state.from.search || '') +
         (state.from.hash || '');
     }
+
+    if (stateTarget && isSafeRedirectUrl(stateTarget)) {
+      return stateTarget.trim();
+    }
   }
 
-  if (candidate && isSafeRedirectUrl(candidate)) {
-    return candidate.trim();
-  }
-
+  // 3. Fallback
   return fallback;
 }

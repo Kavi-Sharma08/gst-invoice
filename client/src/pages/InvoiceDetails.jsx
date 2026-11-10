@@ -39,7 +39,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '@/features/auth';
 import { invoicesApi, invoiceQueryKeys } from '../api/invoices.api';
 import { customerQueryKeys } from '../api/customers.api';
 import { formatCurrency, numberToWords } from '../utils/currency';

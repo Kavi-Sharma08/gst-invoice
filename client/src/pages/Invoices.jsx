@@ -29,7 +29,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '@/features/auth';
 import { invoicesApi, invoiceQueryKeys } from '../api/invoices.api';
 import { formatCurrency } from '../utils/currency';
 import { useDebounce } from '../utils/useDebounce';

@@ -27,7 +27,7 @@ import {
   ArchiveRestore
 } from 'lucide-react';
 
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '@/features/auth';
 import { customersApi, customerQueryKeys } from '../api/customers.api';
 import { invoicesApi, invoiceQueryKeys } from '../api/invoices.api';
 import { useAppNavigate } from '../utils/navigation';

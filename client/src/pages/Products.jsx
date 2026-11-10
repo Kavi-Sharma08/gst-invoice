@@ -26,7 +26,7 @@ import {
   X, AlertCircle,
 } from 'lucide-react';
 
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '@/features/auth';
 import { productsApi } from '../api/products.api';
 import { formatCurrency } from '../utils/currency';
 import { useDebounce } from '../utils/useDebounce';

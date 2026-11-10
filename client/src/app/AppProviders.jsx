@@ -2,9 +2,8 @@ import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { ClerkProvider } from '@clerk/clerk-react';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider } from '@/context/AuthContext';
+import { AuthProvider, clerkAppearance } from '@/features/auth';
 import { queryClient } from '@/lib/queryClient';
-import { clerkAppearance } from '@/lib/clerkAppearance';
 import { PATHS } from '@/app/routes/paths';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
