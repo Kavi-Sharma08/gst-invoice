@@ -31,3 +31,4 @@ export const clerkAppearance = {
 };
 
 export default clerkAppearance;
+

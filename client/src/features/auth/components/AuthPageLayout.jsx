@@ -35,3 +35,4 @@ export function AuthPageLayout({ title, subtitle, children, redirectUrl }) {
 }
 
 export default AuthPageLayout;
+
