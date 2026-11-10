@@ -1,6 +1,6 @@
 import { lazy } from 'react';
 
-const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const Dashboard = lazy(() => import('@/features/dashboard'));
 const Invoices = lazy(() => import('@/pages/Invoices'));
 const CreateInvoice = lazy(() => import('@/pages/CreateInvoice'));
 const InvoiceDetails = lazy(() => import('@/pages/InvoiceDetails'));

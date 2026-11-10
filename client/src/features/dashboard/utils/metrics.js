@@ -144,3 +144,4 @@ export function getNeedsAttentionInvoices(invoices, windowDays = 7, now = new Da
     })
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 }
+

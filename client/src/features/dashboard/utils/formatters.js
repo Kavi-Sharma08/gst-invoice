@@ -29,3 +29,4 @@ export function formatDDMMYYYY(dateInput) {
     return String(dateInput);
   }
 }
+

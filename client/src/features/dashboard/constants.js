@@ -15,3 +15,4 @@ export const ATTENTION_DAYS_WINDOW = 7;
 export function getPeriodOptions(now = new Date()) {
   return ['This month', 'Last 6 months', getFinancialYearLabel(now), 'All time'];
 }
+

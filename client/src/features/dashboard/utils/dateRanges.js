@@ -82,3 +82,4 @@ export function filterInvoicesByPeriod(invoices, period, now = new Date()) {
   // 'All time' or any other period
   return invoices;
 }
+

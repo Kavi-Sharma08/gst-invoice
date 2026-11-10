@@ -128,3 +128,4 @@ export function useDashboardMetrics({ invoices = [], period = 'Last 6 months', c
 }
 
 export default useDashboardMetrics;
+
